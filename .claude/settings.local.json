@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/tmp/rx_part2.html:*)",
+      "Read(//tmp/**)",
+      "Bash(node -e \":*)",
+      "Read(//usr/local/bin/**)",
+      "Read(//opt/homebrew/**)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(grep -Pn [x{1F600}-x{1F64F}x{1F300}-x{1F5FF}x{1F680}-x{1F6FF}x{1F900}-x{1F9FF}x{2600}-x{26FF}x{2700}-x{27BF}] /Users/rocki/Documents/rxtrading/RXTrading_FINALL.html)",
+      "Bash(python3 -:*)",
+      "Bash(grep -n \"htfTrend === ''NEUTRAL''\\\\|When HTF is NEUTRAL\" /Users/rocki/Documents/rxtrading/RXTrading_FINALL.html)",
+      "Bash(npm install:*)",
+      "Bash(node -e \"const c=require\\(''crypto''\\); console.log\\(''JWT_SECRET=''+c.randomBytes\\(48\\).toString\\(''hex''\\)\\); console.log\\(''ADMIN_SECRET=RX-ADMIN-''+c.randomBytes\\(16\\).toString\\(''hex''\\).toUpperCase\\(\\)\\);\")",
+      "Bash(timeout 5 node server.js)",
+      "Bash(node admin-cli.js generate 1 \"TestUser\")",
+      "Bash(node admin-cli.js list)",
+      "Bash(kill %1)",
+      "Bash(pkill -f \"node server.js\")"
+    ]
+  }
+}
