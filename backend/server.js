@@ -481,6 +481,16 @@ app.post('/api/payments/mercadopago/checkout', paymentLimiter, async (req, res) 
   const paymentId = `pay_${crypto.randomUUID()}`;
 
   try {
+    // Get USD→ARS exchange rate from dolarapi
+    let arsPrice = plan.usd * 1400; // fallback rate
+    try {
+      const fxRes = await fetch('https://dolarapi.com/v1/dolares/blue');
+      if (fxRes.ok) {
+        const fx = await fxRes.json();
+        arsPrice = Math.ceil(plan.usd * (fx.venta || 1400));
+      }
+    } catch(e) { /* use fallback */ }
+
     await pool.query(
       'INSERT INTO payments (payment_id, provider, plan_id, amount_usd, email, status) VALUES ($1, $2, $3, $4, $5, $6)',
       [paymentId, 'mercadopago', planId, plan.usd, email || '', 'pending']
@@ -496,8 +506,8 @@ app.post('/api/payments/mercadopago/checkout', paymentLimiter, async (req, res) 
         items: [{
           title: plan.name,
           quantity: 1,
-          unit_price: plan.usd,
-          currency_id: 'USD',
+          unit_price: arsPrice,
+          currency_id: 'ARS',
         }],
         back_urls: {
           success: `${FRONTEND_URL}/app.html?payment=success&provider=mercadopago&payment_id=${paymentId}#vip`,
