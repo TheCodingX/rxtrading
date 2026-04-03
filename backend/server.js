@@ -439,7 +439,7 @@ app.post('/api/payments/stripe/checkout', paymentLimiter, async (req, res) => {
       line_items: [{
         price_data: {
           currency: 'usd',
-          product: plan.stripeProd,
+          product_data: { name: plan.name },
           unit_amount: Math.round(plan.usd * 100),
         },
         quantity: 1,
