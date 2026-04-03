@@ -401,7 +401,7 @@ async function start() {
       console.log(`\n  ╔══════════════════════════════════════╗`);
       console.log(`  ║   RX PRO — Backend API v1.0          ║`);
       console.log(`  ║   Puerto: ${PORT}                        ║`);
-      console.log(`  ║   CORS:   ${CORS_ORIGIN.padEnd(25)} ║`);
+      console.log(`  ║   CORS:   ${CORS_ORIGINS.join(', ').slice(0,25).padEnd(25)} ║`);
       console.log(`  ╚══════════════════════════════════════╝\n`);
     });
   } catch (err) {
