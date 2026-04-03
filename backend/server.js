@@ -42,8 +42,7 @@ const BACKEND_URL = process.env.BACKEND_URL || 'https://rxtrading-1.onrender.com
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 const PLANS = {
-  '1d':  { name: 'RXTrading VIP - 1 Day',    days: 1,   usd: 1.00 },
-  '7d':  { name: 'RXTrading VIP - 7 Days',   days: 7,   usd: 29.99 },
+  '7d':  { name: 'RXTrading VIP - 7 Days',   days: 7,   usd: 39.99 },
   '1m':  { name: 'RXTrading VIP - 1 Month',  days: 30,  usd: 119.99 },
   '3m':  { name: 'RXTrading VIP - 3 Months', days: 90,  usd: 339.99 },
   '1y':  { name: 'RXTrading VIP - Yearly',   days: 365, usd: 499.99 },
@@ -481,16 +480,6 @@ app.post('/api/payments/mercadopago/checkout', paymentLimiter, async (req, res) 
   const paymentId = `pay_${crypto.randomUUID()}`;
 
   try {
-    // Get USD→ARS exchange rate from dolarapi
-    let arsPrice = plan.usd * 1400; // fallback rate
-    try {
-      const fxRes = await fetch('https://dolarapi.com/v1/dolares/blue');
-      if (fxRes.ok) {
-        const fx = await fxRes.json();
-        arsPrice = Math.ceil(plan.usd * (fx.venta || 1400));
-      }
-    } catch(e) { /* use fallback */ }
-
     await pool.query(
       'INSERT INTO payments (payment_id, provider, plan_id, amount_usd, email, status) VALUES ($1, $2, $3, $4, $5, $6)',
       [paymentId, 'mercadopago', planId, plan.usd, email || '', 'pending']
@@ -506,8 +495,8 @@ app.post('/api/payments/mercadopago/checkout', paymentLimiter, async (req, res) 
         items: [{
           title: plan.name,
           quantity: 1,
-          unit_price: arsPrice,
-          currency_id: 'ARS',
+          unit_price: plan.usd,
+          currency_id: 'USD',
         }],
         back_urls: {
           success: `${FRONTEND_URL}/app.html?payment=success&provider=mercadopago&payment_id=${paymentId}#vip`,
