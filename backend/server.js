@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const Stripe = require('stripe');
 const { pool, initDB } = require('./database');
 
 const app = express();
@@ -14,6 +15,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_SECRET = process.env.ADMIN_SECRET;
 const CORS_ORIGINS = (process.env.CORS_ORIGIN || 'https://rxtrading.net')
   .split(',').map(s => s.trim());
+
 // Always allow both www and non-www
 if (CORS_ORIGINS.includes('https://rxtrading.net') && !CORS_ORIGINS.includes('https://www.rxtrading.net')) {
   CORS_ORIGINS.push('https://www.rxtrading.net');
@@ -24,7 +26,90 @@ if (!JWT_SECRET || JWT_SECRET.includes('CAMBIA_ESTO')) {
   process.exit(1);
 }
 
-// Middleware
+// ════════════════════════════════════════════════════
+//  PAYMENT CONFIG
+// ════════════════════════════════════════════════════
+
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || '';
+const USDT_WALLET = process.env.USDT_WALLET || 'ETf8gN5Zg1RTibnXv1Moixk8ksnGmLZd76uzgR4RCTG7';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://rxtrading.net';
+const BACKEND_URL = process.env.BACKEND_URL || 'https://rxtrading-1.onrender.com';
+
+const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
+
+const PLANS = {
+  '7d':  { name: 'RXTrading VIP - 7 Days',   days: 7,   usd: 29.99,  stripeProd: 'prod_UGZVTroI3y4sNd' },
+  '1m':  { name: 'RXTrading VIP - 1 Month',  days: 30,  usd: 119.99, stripeProd: 'prod_UGZXtqoOU1JLci' },
+  '3m':  { name: 'RXTrading VIP - 3 Months', days: 90,  usd: 339.99, stripeProd: 'prod_UGZYfB7CO089YR' },
+  '1y':  { name: 'RXTrading VIP - Yearly',   days: 365, usd: 499.99, stripeProd: 'prod_UGZaUxkefx1aem' },
+};
+
+// ════════════════════════════════════════════════════
+//  STRIPE WEBHOOK (raw body — MUST be before express.json)
+// ════════════════════════════════════════════════════
+
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+    console.error('[Stripe Webhook] Stripe not configured');
+    return res.status(500).json({ error: 'Stripe not configured' });
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('[Stripe Webhook] Signature verification failed:', err.message);
+    return res.status(400).json({ error: 'Invalid signature' });
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const paymentId = session.metadata?.payment_id;
+    const planId = session.metadata?.plan_id;
+    const email = session.customer_details?.email || '';
+    const customerName = session.customer_details?.name || '';
+
+    if (!paymentId || !planId) {
+      console.error('[Stripe Webhook] Missing metadata in session:', session.id);
+      return res.status(200).json({ received: true });
+    }
+
+    try {
+      // Check if already processed
+      const { rows } = await pool.query(
+        'SELECT status FROM payments WHERE payment_id = $1',
+        [paymentId]
+      );
+      if (rows[0]?.status === 'completed') {
+        console.log('[Stripe Webhook] Payment already processed:', paymentId);
+        return res.status(200).json({ received: true });
+      }
+
+      // Update email/name on the payment record
+      await pool.query(
+        'UPDATE payments SET email = $1, customer_name = $2, provider_ref = $3 WHERE payment_id = $4',
+        [email, customerName, session.id, paymentId]
+      );
+
+      const keyCode = await generateVIPKeyForPayment(paymentId, planId, email, customerName);
+      console.log('[Stripe Webhook] Payment completed:', paymentId, '- Key:', keyCode);
+    } catch (err) {
+      console.error('[Stripe Webhook] Error processing payment:', err);
+      return res.status(500).json({ error: 'Processing error' });
+    }
+  }
+
+  res.status(200).json({ received: true });
+});
+
+// ════════════════════════════════════════════════════
+//  GLOBAL MIDDLEWARE
+// ════════════════════════════════════════════════════
+
 app.use(helmet());
 app.use(cors({
   origin: function(origin, callback) {
@@ -40,7 +125,10 @@ app.use(express.json({ limit: '10kb' }));
 // Trust proxy for rate limiting behind reverse proxy
 app.set('trust proxy', 1);
 
-// Rate limiting — general
+// ════════════════════════════════════════════════════
+//  RATE LIMITERS
+// ════════════════════════════════════════════════════
+
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -49,7 +137,6 @@ const generalLimiter = rateLimit({
   message: { error: 'Demasiadas peticiones. Intenta en 15 minutos.' }
 });
 
-// Rate limiting — strict for validation endpoint
 const validateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -58,11 +145,18 @@ const validateLimiter = rateLimit({
   message: { error: 'Demasiados intentos de validación. Intenta en 15 minutos.' }
 });
 
-// Rate limiting — admin endpoints
 const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
   message: { error: 'Demasiadas peticiones admin.' }
+});
+
+const paymentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas peticiones de pago. Intenta en 15 minutos.' }
 });
 
 app.use('/api/', generalLimiter);
@@ -106,8 +200,43 @@ function getClientIP(req) {
   return req.ip || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || '';
 }
 
+/**
+ * Generate a VIP license key for a completed payment.
+ * Inserts into license_keys and updates the payments record.
+ */
+async function generateVIPKeyForPayment(paymentId, planId, email, customerName) {
+  const plan = PLANS[planId];
+  if (!plan) throw new Error(`Invalid plan: ${planId}`);
+
+  // Generate unique key code
+  let keyCode;
+  do {
+    keyCode = generateKeyCode();
+    const { rows } = await pool.query(
+      'SELECT id FROM license_keys WHERE key_code = $1',
+      [keyCode]
+    );
+    if (rows.length === 0) break;
+  } while (true);
+
+  const expiresAt = new Date(Date.now() + plan.days * 86400000).toISOString();
+  const keyHash = await bcrypt.hash(keyCode, 10);
+
+  await pool.query(
+    'INSERT INTO license_keys (key_code, key_hash, owner_name, max_activations, expires_at) VALUES ($1, $2, $3, $4, $5)',
+    [keyCode, keyHash, customerName || email || '', 1, expiresAt]
+  );
+
+  await pool.query(
+    'UPDATE payments SET key_code = $1, status = $2, completed_at = NOW() WHERE payment_id = $3',
+    [keyCode, 'completed', paymentId]
+  );
+
+  return keyCode;
+}
+
 // ════════════════════════════════════════════════════
-//  API ENDPOINTS
+//  LICENSE KEY ENDPOINTS
 // ════════════════════════════════════════════════════
 
 // POST /api/keys/validate — Validate a license key
@@ -269,8 +398,316 @@ app.post('/api/keys/logout', verifyToken, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════
+//  PAYMENT ENDPOINTS
+// ════════════════════════════════════════════════════
+
+// GET /api/payments/plans — Return available plans (public)
+app.get('/api/payments/plans', (req, res) => {
+  const plans = {};
+  for (const [id, plan] of Object.entries(PLANS)) {
+    plans[id] = { name: plan.name, usd: plan.usd };
+  }
+  res.json({ plans });
+});
+
+// POST /api/payments/stripe/checkout — Create Stripe Checkout Session
+app.post('/api/payments/stripe/checkout', paymentLimiter, async (req, res) => {
+  const { planId, email } = req.body;
+
+  if (!planId || !PLANS[planId]) {
+    return res.status(400).json({ error: 'Plan inválido.' });
+  }
+
+  if (!stripe) {
+    return res.status(503).json({ error: 'Stripe no está configurado.' });
+  }
+
+  const plan = PLANS[planId];
+  const paymentId = `pay_${crypto.randomUUID()}`;
+
+  try {
+    await pool.query(
+      'INSERT INTO payments (payment_id, provider, plan_id, amount_usd, email, status) VALUES ($1, $2, $3, $4, $5, $6)',
+      [paymentId, 'stripe', planId, plan.usd, email || '', 'pending']
+    );
+
+    const sessionParams = {
+      mode: 'payment',
+      line_items: [{
+        price_data: {
+          currency: 'usd',
+          product: plan.stripeProd,
+          unit_amount: Math.round(plan.usd * 100),
+        },
+        quantity: 1,
+      }],
+      success_url: `${FRONTEND_URL}/index.html?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${FRONTEND_URL}/index.html?payment=cancelled`,
+      metadata: {
+        payment_id: paymentId,
+        plan_id: planId,
+      },
+    };
+
+    if (email) {
+      sessionParams.customer_email = email;
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+
+    res.json({ url: session.url, paymentId });
+  } catch (err) {
+    console.error('Error creating Stripe checkout:', err);
+    res.status(500).json({ error: 'Error al crear sesión de pago.' });
+  }
+});
+
+// POST /api/payments/mercadopago/checkout — Create MercadoPago Preference
+app.post('/api/payments/mercadopago/checkout', paymentLimiter, async (req, res) => {
+  const { planId, email } = req.body;
+
+  if (!planId || !PLANS[planId]) {
+    return res.status(400).json({ error: 'Plan inválido.' });
+  }
+
+  if (!MP_ACCESS_TOKEN) {
+    return res.status(503).json({ error: 'MercadoPago no está configurado.' });
+  }
+
+  const plan = PLANS[planId];
+  const paymentId = `pay_${crypto.randomUUID()}`;
+
+  try {
+    await pool.query(
+      'INSERT INTO payments (payment_id, provider, plan_id, amount_usd, email, status) VALUES ($1, $2, $3, $4, $5, $6)',
+      [paymentId, 'mercadopago', planId, plan.usd, email || '', 'pending']
+    );
+
+    const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+      },
+      body: JSON.stringify({
+        items: [{
+          title: plan.name,
+          quantity: 1,
+          unit_price: plan.usd,
+          currency_id: 'USD',
+        }],
+        back_urls: {
+          success: `${FRONTEND_URL}/index.html?payment=success&provider=mercadopago&payment_id=${paymentId}`,
+          failure: `${FRONTEND_URL}/index.html?payment=failed`,
+          pending: `${FRONTEND_URL}/index.html?payment=pending&payment_id=${paymentId}`,
+        },
+        external_reference: paymentId,
+        notification_url: `${BACKEND_URL}/api/webhooks/mercadopago`,
+        auto_return: 'approved',
+      }),
+    });
+
+    if (!response.ok) {
+      const errBody = await response.text();
+      console.error('MercadoPago preference error:', response.status, errBody);
+      return res.status(502).json({ error: 'Error al crear preferencia de pago.' });
+    }
+
+    const preference = await response.json();
+    const url = preference.init_point || preference.sandbox_init_point;
+
+    res.json({ url, paymentId });
+  } catch (err) {
+    console.error('Error creating MercadoPago checkout:', err);
+    res.status(500).json({ error: 'Error al crear sesión de pago.' });
+  }
+});
+
+// POST /api/webhooks/mercadopago — MercadoPago IPN Webhook
+app.post('/api/webhooks/mercadopago', async (req, res) => {
+  const { type, data } = req.body;
+
+  if (type !== 'payment' || !data?.id) {
+    return res.status(200).json({ received: true });
+  }
+
+  try {
+    // Fetch payment details from MercadoPago API to verify
+    const mpResponse = await fetch(`https://api.mercadopago.com/v1/payments/${data.id}`, {
+      headers: {
+        'Authorization': `Bearer ${MP_ACCESS_TOKEN}`,
+      },
+    });
+
+    if (!mpResponse.ok) {
+      console.error('[MP Webhook] Failed to fetch payment:', mpResponse.status);
+      return res.status(200).json({ received: true });
+    }
+
+    const mpPayment = await mpResponse.json();
+
+    if (mpPayment.status === 'approved') {
+      const paymentId = mpPayment.external_reference;
+
+      if (!paymentId) {
+        console.error('[MP Webhook] No external_reference in payment:', data.id);
+        return res.status(200).json({ received: true });
+      }
+
+      // Check if already processed
+      const { rows } = await pool.query(
+        'SELECT * FROM payments WHERE payment_id = $1',
+        [paymentId]
+      );
+      const payment = rows[0];
+
+      if (!payment) {
+        console.error('[MP Webhook] Payment not found:', paymentId);
+        return res.status(200).json({ received: true });
+      }
+
+      if (payment.status === 'completed') {
+        console.log('[MP Webhook] Payment already processed:', paymentId);
+        return res.status(200).json({ received: true });
+      }
+
+      // Update provider ref
+      await pool.query(
+        'UPDATE payments SET provider_ref = $1, email = COALESCE(NULLIF($2, \'\'), email) WHERE payment_id = $3',
+        [String(data.id), mpPayment.payer?.email || '', paymentId]
+      );
+
+      const keyCode = await generateVIPKeyForPayment(
+        paymentId,
+        payment.plan_id,
+        mpPayment.payer?.email || payment.email,
+        mpPayment.payer?.first_name || payment.customer_name
+      );
+      console.log('[MP Webhook] Payment completed:', paymentId, '- Key:', keyCode);
+    }
+  } catch (err) {
+    console.error('[MP Webhook] Error processing:', err);
+  }
+
+  res.status(200).json({ received: true });
+});
+
+// POST /api/payments/usdt/create — Create USDT Payment Request
+app.post('/api/payments/usdt/create', paymentLimiter, async (req, res) => {
+  const { planId, email } = req.body;
+
+  if (!planId || !PLANS[planId]) {
+    return res.status(400).json({ error: 'Plan inválido.' });
+  }
+
+  const plan = PLANS[planId];
+  const paymentId = `pay_${crypto.randomUUID()}`;
+
+  try {
+    await pool.query(
+      'INSERT INTO payments (payment_id, provider, plan_id, amount_usd, email, status) VALUES ($1, $2, $3, $4, $5, $6)',
+      [paymentId, 'usdt', planId, plan.usd, email || '', 'pending']
+    );
+
+    res.json({
+      paymentId,
+      wallet: USDT_WALLET,
+      amount: plan.usd,
+      reference: paymentId,
+    });
+  } catch (err) {
+    console.error('Error creating USDT payment:', err);
+    res.status(500).json({ error: 'Error al crear solicitud de pago.' });
+  }
+});
+
+// POST /api/admin/payments/usdt/confirm — Admin confirms USDT payment
+app.post('/api/admin/payments/usdt/confirm', adminLimiter, verifyAdminSecret, async (req, res) => {
+  const { paymentId, txHash } = req.body;
+
+  if (!paymentId) {
+    return res.status(400).json({ error: 'paymentId requerido.' });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM payments WHERE payment_id = $1 AND provider = 'usdt' AND status = 'pending'",
+      [paymentId]
+    );
+    const payment = rows[0];
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Pago USDT pendiente no encontrado.' });
+    }
+
+    if (txHash) {
+      await pool.query(
+        'UPDATE payments SET provider_ref = $1 WHERE payment_id = $2',
+        [txHash, paymentId]
+      );
+    }
+
+    const keyCode = await generateVIPKeyForPayment(
+      paymentId,
+      payment.plan_id,
+      payment.email,
+      payment.customer_name
+    );
+
+    console.log('[USDT Confirm] Payment completed:', paymentId, '- Key:', keyCode);
+    res.json({ success: true, keyCode });
+  } catch (err) {
+    console.error('Error confirming USDT payment:', err);
+    res.status(500).json({ error: 'Error al confirmar pago.' });
+  }
+});
+
+// GET /api/payments/status/:paymentId — Check payment status
+app.get('/api/payments/status/:paymentId', async (req, res) => {
+  const { paymentId } = req.params;
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT payment_id, status, key_code, plan_id FROM payments WHERE payment_id = $1',
+      [paymentId]
+    );
+    const payment = rows[0];
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Pago no encontrado.' });
+    }
+
+    if (payment.status === 'completed') {
+      return res.json({
+        status: 'completed',
+        keyCode: payment.key_code,
+        plan: payment.plan_id,
+      });
+    }
+
+    res.json({ status: 'pending' });
+  } catch (err) {
+    console.error('Error checking payment status:', err);
+    res.status(500).json({ error: 'Error interno.' });
+  }
+});
+
+// ════════════════════════════════════════════════════
 //  ADMIN ENDPOINTS
 // ════════════════════════════════════════════════════
+
+// GET /api/admin/payments — List all payments (admin only)
+app.get('/api/admin/payments', adminLimiter, verifyAdminSecret, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM payments ORDER BY created_at DESC'
+    );
+    res.json({ payments: rows });
+  } catch (err) {
+    console.error('Error listing payments:', err);
+    res.status(500).json({ error: 'Error interno.' });
+  }
+});
 
 // POST /api/admin/keys/generate — Generate new license keys
 app.post('/api/admin/keys/generate', adminLimiter, verifyAdminSecret, async (req, res) => {
@@ -399,9 +836,11 @@ async function start() {
     await initDB();
     app.listen(PORT, () => {
       console.log(`\n  ╔══════════════════════════════════════╗`);
-      console.log(`  ║   RX PRO — Backend API v1.0          ║`);
+      console.log(`  ║   RX PRO — Backend API v1.1          ║`);
       console.log(`  ║   Puerto: ${PORT}                        ║`);
       console.log(`  ║   CORS:   ${CORS_ORIGINS.join(', ').slice(0,25).padEnd(25)} ║`);
+      console.log(`  ║   Stripe: ${stripe ? 'Configured' : 'Not configured'}             ║`);
+      console.log(`  ║   MP:     ${MP_ACCESS_TOKEN ? 'Configured' : 'Not configured'}             ║`);
       console.log(`  ╚══════════════════════════════════════╝\n`);
     });
   } catch (err) {
