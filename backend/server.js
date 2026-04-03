@@ -33,7 +33,9 @@ if (!JWT_SECRET || JWT_SECRET.includes('CAMBIA_ESTO')) {
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || '';
-const USDT_WALLET = process.env.USDT_WALLET || 'ETf8gN5Zg1RTibnXv1Moixk8ksnGmLZd76uzgR4RCTG7';
+const USDT_WALLET = process.env.USDT_WALLET || '0x24bB8Db9b53E91A15dEaA40EA90531C7E087c101';
+const NOWPAYMENTS_API_KEY = process.env.NOWPAYMENTS_API_KEY || '';
+const NOWPAYMENTS_IPN_SECRET = process.env.NOWPAYMENTS_IPN_SECRET || '';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://rxtrading.net';
 const BACKEND_URL = process.env.BACKEND_URL || 'https://rxtrading-1.onrender.com';
 
@@ -592,12 +594,86 @@ app.post('/api/webhooks/mercadopago', async (req, res) => {
   res.status(200).json({ received: true });
 });
 
-// POST /api/payments/usdt/create — Create USDT Payment Request
+// POST /api/webhooks/nowpayments — NOWPayments IPN Webhook (auto USDT confirmation)
+app.post('/api/webhooks/nowpayments', async (req, res) => {
+  // Verify IPN signature
+  if (NOWPAYMENTS_IPN_SECRET) {
+    const hmac = crypto.createHmac('sha512', NOWPAYMENTS_IPN_SECRET);
+    // NOWPayments requires sorting keys before hashing
+    const sorted = Object.keys(req.body).sort().reduce((obj, key) => { obj[key] = req.body[key]; return obj; }, {});
+    hmac.update(JSON.stringify(sorted));
+    const signature = hmac.digest('hex');
+    const receivedSig = req.headers['x-nowpayments-sig'];
+
+    if (!receivedSig || signature !== receivedSig) {
+      console.error('[NOWPayments Webhook] Invalid signature');
+      return res.status(400).json({ error: 'Invalid signature' });
+    }
+  }
+
+  const { payment_status, order_id, payment_id, pay_address, actually_paid, outcome_amount } = req.body;
+
+  console.log('[NOWPayments Webhook] Status:', payment_status, 'Order:', order_id, 'NP-ID:', payment_id);
+
+  // Only process confirmed/finished payments
+  if (payment_status !== 'finished' && payment_status !== 'confirmed') {
+    return res.status(200).json({ received: true });
+  }
+
+  if (!order_id) {
+    console.error('[NOWPayments Webhook] No order_id');
+    return res.status(200).json({ received: true });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM payments WHERE payment_id = $1',
+      [order_id]
+    );
+    const payment = rows[0];
+
+    if (!payment) {
+      console.error('[NOWPayments Webhook] Payment not found:', order_id);
+      return res.status(200).json({ received: true });
+    }
+
+    if (payment.status === 'completed') {
+      console.log('[NOWPayments Webhook] Already processed:', order_id);
+      return res.status(200).json({ received: true });
+    }
+
+    // Update provider ref
+    await pool.query(
+      'UPDATE payments SET provider_ref = $1 WHERE payment_id = $2',
+      [String(payment_id), order_id]
+    );
+
+    const keyCode = await generateVIPKeyForPayment(
+      order_id,
+      payment.plan_id,
+      payment.email,
+      payment.customer_name
+    );
+
+    console.log('[NOWPayments Webhook] Payment completed:', order_id, '- Key:', keyCode);
+  } catch (err) {
+    console.error('[NOWPayments Webhook] Error:', err);
+    return res.status(500).json({ error: 'Processing error' });
+  }
+
+  res.status(200).json({ received: true });
+});
+
+// POST /api/payments/usdt/create — Create USDT Payment via NOWPayments
 app.post('/api/payments/usdt/create', paymentLimiter, async (req, res) => {
   const { planId, email } = req.body;
 
   if (!planId || !PLANS[planId]) {
     return res.status(400).json({ error: 'Plan inválido.' });
+  }
+
+  if (!NOWPAYMENTS_API_KEY) {
+    return res.status(503).json({ error: 'Crypto payments not configured.' });
   }
 
   const plan = PLANS[planId];
@@ -609,15 +685,59 @@ app.post('/api/payments/usdt/create', paymentLimiter, async (req, res) => {
       [paymentId, 'usdt', planId, plan.usd, email || '', 'pending']
     );
 
+    // Create payment via NOWPayments API
+    const npRes = await fetch('https://api.nowpayments.io/v1/payment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': NOWPAYMENTS_API_KEY,
+      },
+      body: JSON.stringify({
+        price_amount: plan.usd,
+        price_currency: 'usd',
+        pay_currency: 'usdterc20',
+        order_id: paymentId,
+        order_description: plan.name,
+        ipn_callback_url: `${BACKEND_URL}/api/webhooks/nowpayments`,
+      }),
+    });
+
+    if (!npRes.ok) {
+      const errBody = await npRes.text();
+      console.error('[NOWPayments] Error creating payment:', npRes.status, errBody);
+      // Fallback: show manual wallet
+      return res.json({
+        paymentId,
+        wallet: USDT_WALLET,
+        amount: plan.usd,
+        manual: true,
+      });
+    }
+
+    const npData = await npRes.json();
+
+    // Save NOWPayments payment ID
+    await pool.query(
+      'UPDATE payments SET provider_ref = $1 WHERE payment_id = $2',
+      [String(npData.payment_id), paymentId]
+    );
+
+    res.json({
+      paymentId,
+      wallet: npData.pay_address,
+      amount: npData.pay_amount,
+      npPaymentId: npData.payment_id,
+      manual: false,
+    });
+  } catch (err) {
+    console.error('Error creating USDT payment:', err);
+    // Fallback: show manual wallet
     res.json({
       paymentId,
       wallet: USDT_WALLET,
       amount: plan.usd,
-      reference: paymentId,
+      manual: true,
     });
-  } catch (err) {
-    console.error('Error creating USDT payment:', err);
-    res.status(500).json({ error: 'Error al crear solicitud de pago.' });
   }
 });
 
@@ -841,6 +961,7 @@ async function start() {
       console.log(`  ║   CORS:   ${CORS_ORIGINS.join(', ').slice(0,25).padEnd(25)} ║`);
       console.log(`  ║   Stripe: ${stripe ? 'Configured' : 'Not configured'}             ║`);
       console.log(`  ║   MP:     ${MP_ACCESS_TOKEN ? 'Configured' : 'Not configured'}             ║`);
+      console.log(`  ║   USDT:   ${NOWPAYMENTS_API_KEY ? 'NOWPayments OK' : 'Manual only'}          ║`);
       console.log(`  ╚══════════════════════════════════════╝\n`);
     });
   } catch (err) {
