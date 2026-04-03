@@ -441,8 +441,8 @@ app.post('/api/payments/stripe/checkout', paymentLimiter, async (req, res) => {
         },
         quantity: 1,
       }],
-      success_url: `${FRONTEND_URL}/index.html?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${FRONTEND_URL}/index.html?payment=cancelled`,
+      success_url: `${FRONTEND_URL}/app.html?payment=success&session_id={CHECKOUT_SESSION_ID}#vip`,
+      cancel_url: `${FRONTEND_URL}/app.html#vip`,
       metadata: {
         payment_id: paymentId,
         plan_id: planId,
@@ -497,9 +497,9 @@ app.post('/api/payments/mercadopago/checkout', paymentLimiter, async (req, res) 
           currency_id: 'USD',
         }],
         back_urls: {
-          success: `${FRONTEND_URL}/index.html?payment=success&provider=mercadopago&payment_id=${paymentId}`,
-          failure: `${FRONTEND_URL}/index.html?payment=failed`,
-          pending: `${FRONTEND_URL}/index.html?payment=pending&payment_id=${paymentId}`,
+          success: `${FRONTEND_URL}/app.html?payment=success&provider=mercadopago&payment_id=${paymentId}#vip`,
+          failure: `${FRONTEND_URL}/app.html#vip`,
+          pending: `${FRONTEND_URL}/app.html?payment=pending&payment_id=${paymentId}#vip`,
         },
         external_reference: paymentId,
         notification_url: `${BACKEND_URL}/api/webhooks/mercadopago`,
