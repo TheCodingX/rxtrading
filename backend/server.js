@@ -12,7 +12,12 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_SECRET = process.env.ADMIN_SECRET;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5500';
+const CORS_ORIGINS = (process.env.CORS_ORIGIN || 'https://rxtrading.net')
+  .split(',').map(s => s.trim());
+// Always allow both www and non-www
+if (CORS_ORIGINS.includes('https://rxtrading.net') && !CORS_ORIGINS.includes('https://www.rxtrading.net')) {
+  CORS_ORIGINS.push('https://www.rxtrading.net');
+}
 
 if (!JWT_SECRET || JWT_SECRET.includes('CAMBIA_ESTO')) {
   console.error('\n[ERROR] Debes cambiar JWT_SECRET en el archivo .env antes de ejecutar.\n');
@@ -21,7 +26,15 @@ if (!JWT_SECRET || JWT_SECRET.includes('CAMBIA_ESTO')) {
 
 // Middleware
 app.use(helmet());
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (CORS_ORIGINS.includes(origin)) return callback(null, true);
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '10kb' }));
 
 // Trust proxy for rate limiting behind reverse proxy
