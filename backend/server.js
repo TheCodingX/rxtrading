@@ -42,10 +42,11 @@ const BACKEND_URL = process.env.BACKEND_URL || 'https://rxtrading-1.onrender.com
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 const PLANS = {
-  '7d':  { name: 'RXTrading VIP - 7 Days',   days: 7,   usd: 29.99,  stripeProd: 'prod_UGZVTroI3y4sNd' },
-  '1m':  { name: 'RXTrading VIP - 1 Month',  days: 30,  usd: 119.99, stripeProd: 'prod_UGZXtqoOU1JLci' },
-  '3m':  { name: 'RXTrading VIP - 3 Months', days: 90,  usd: 339.99, stripeProd: 'prod_UGZYfB7CO089YR' },
-  '1y':  { name: 'RXTrading VIP - Yearly',   days: 365, usd: 499.99, stripeProd: 'prod_UGZaUxkefx1aem' },
+  '1d':  { name: 'RXTrading VIP - 1 Day',    days: 1,   usd: 1.00 },
+  '7d':  { name: 'RXTrading VIP - 7 Days',   days: 7,   usd: 29.99 },
+  '1m':  { name: 'RXTrading VIP - 1 Month',  days: 30,  usd: 119.99 },
+  '3m':  { name: 'RXTrading VIP - 3 Months', days: 90,  usd: 339.99 },
+  '1y':  { name: 'RXTrading VIP - Yearly',   days: 365, usd: 499.99 },
 };
 
 // ════════════════════════════════════════════════════
