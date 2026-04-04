@@ -54,6 +54,30 @@ async function initDB() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_activation_fp ON activations(fingerprint)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_payment_id ON payments(payment_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_payment_status ON payments(status)`);
+
+  // ══ VIP CLOUD SYNC — Paper Trading & Signal History ══
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_paper_data (
+      id SERIAL PRIMARY KEY,
+      key_id INTEGER NOT NULL REFERENCES license_keys(id) ON DELETE CASCADE,
+      data JSONB NOT NULL DEFAULT '{}',
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(key_id)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_signal_history (
+      id SERIAL PRIMARY KEY,
+      key_id INTEGER NOT NULL REFERENCES license_keys(id) ON DELETE CASCADE,
+      data JSONB NOT NULL DEFAULT '[]',
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(key_id)
+    )
+  `);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_paper_key ON user_paper_data(key_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_sighist_key ON user_signal_history(key_id)`);
 }
 
 module.exports = { pool, initDB };

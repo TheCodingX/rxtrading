@@ -122,7 +122,7 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '200kb' }));
 
 // Trust proxy for rate limiting behind reverse proxy
 app.set('trust proxy', 1);
@@ -943,6 +943,111 @@ app.delete('/api/admin/keys/:code', adminLimiter, verifyAdminSecret, async (req,
     res.json({ success: true, message: 'Código eliminado permanentemente.' });
   } catch (err) {
     console.error('Error deleting key:', err);
+    res.status(500).json({ error: 'Error interno.' });
+  }
+});
+
+// ════════════════════════════════════════════════════
+//  VIP CLOUD SYNC — Paper Trading & Signal History
+// ═══════════════════════════════════════���════════════
+
+const syncLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,  // 1 minute
+  max: 30,                    // 30 req/min — enough for real-time sync
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Sync rate limit — intenta en 1 minuto.' }
+});
+
+// GET /api/user/paper — Fetch paper trading data from cloud
+app.get('/api/user/paper', syncLimiter, verifyToken, async (req, res) => {
+  const { keyId } = req.license;
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT data, updated_at FROM user_paper_data WHERE key_id = $1',
+      [keyId]
+    );
+
+    if (!rows[0]) {
+      return res.json({ data: null, updatedAt: null });
+    }
+
+    res.json({ data: rows[0].data, updatedAt: rows[0].updated_at });
+  } catch (err) {
+    console.error('[Sync] Error fetching paper data:', err);
+    res.status(500).json({ error: 'Error interno.' });
+  }
+});
+
+// POST /api/user/paper — Save paper trading data to cloud
+app.post('/api/user/paper', syncLimiter, verifyToken, async (req, res) => {
+  const { keyId } = req.license;
+  const { data } = req.body;
+
+  if (!data || typeof data !== 'object') {
+    return res.status(400).json({ error: 'Data inválida.' });
+  }
+
+  try {
+    await pool.query(`
+      INSERT INTO user_paper_data (key_id, data, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (key_id)
+      DO UPDATE SET data = $2, updated_at = NOW()
+    `, [keyId, JSON.stringify(data)]);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Sync] Error saving paper data:', err);
+    res.status(500).json({ error: 'Error interno.' });
+  }
+});
+
+// GET /api/user/signals — Fetch signal history from cloud
+app.get('/api/user/signals', syncLimiter, verifyToken, async (req, res) => {
+  const { keyId } = req.license;
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT data, updated_at FROM user_signal_history WHERE key_id = $1',
+      [keyId]
+    );
+
+    if (!rows[0]) {
+      return res.json({ data: null, updatedAt: null });
+    }
+
+    res.json({ data: rows[0].data, updatedAt: rows[0].updated_at });
+  } catch (err) {
+    console.error('[Sync] Error fetching signal history:', err);
+    res.status(500).json({ error: 'Error interno.' });
+  }
+});
+
+// POST /api/user/signals — Save signal history to cloud
+app.post('/api/user/signals', syncLimiter, verifyToken, async (req, res) => {
+  const { keyId } = req.license;
+  const { data } = req.body;
+
+  if (!Array.isArray(data)) {
+    return res.status(400).json({ error: 'Data debe ser un array.' });
+  }
+
+  // Limit to last 500 signals to avoid bloat
+  const trimmed = data.slice(-500);
+
+  try {
+    await pool.query(`
+      INSERT INTO user_signal_history (key_id, data, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (key_id)
+      DO UPDATE SET data = $2, updated_at = NOW()
+    `, [keyId, JSON.stringify(trimmed)]);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Sync] Error saving signal history:', err);
     res.status(500).json({ error: 'Error interno.' });
   }
 });
