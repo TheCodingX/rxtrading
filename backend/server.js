@@ -1053,11 +1053,247 @@ app.post('/api/user/signals', syncLimiter, verifyToken, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════
+//  BROKER INTEGRATION — Binance Futures real trading
+// ════════════════════════════════════════════════════
+
+const broker = require('./broker');
+
+// Rate limiter for broker endpoints (max 30 req / min per user)
+const brokerLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados requests al broker. Espera un minuto.' }
+});
+
+// Connect broker: user sends API key + secret, we encrypt and store
+app.post('/api/broker/connect', verifyToken, brokerLimiter, async (req, res) => {
+  try {
+    const { apiKey, apiSecret, maxPositionUsd, maxLeverage, dailyLossLimitUsd } = req.body;
+    if (!apiKey || !apiSecret) return res.status(400).json({ error: 'apiKey y apiSecret requeridos' });
+    if (apiKey.length < 20 || apiSecret.length < 20) return res.status(400).json({ error: 'Credenciales inválidas' });
+
+    // Test the credentials against Binance
+    let accountTest;
+    try {
+      accountTest = await broker.testConnection(apiKey, apiSecret);
+    } catch (e) {
+      return res.status(400).json({ error: 'Credenciales inválidas o sin permisos de Futures: ' + e.message });
+    }
+
+    if (!accountTest.canTrade) {
+      return res.status(400).json({ error: 'Esta API key no tiene permiso de trading. Activá "Enable Futures" en Binance.' });
+    }
+
+    const keyEnc = broker.encrypt(apiKey);
+    const secretEnc = broker.encrypt(apiSecret);
+
+    const maxPos = Math.max(10, Math.min(10000, parseFloat(maxPositionUsd) || 500));
+    const maxLev = Math.max(1, Math.min(20, parseInt(maxLeverage) || 5));
+    const dailyLim = Math.max(10, Math.min(5000, parseFloat(dailyLossLimitUsd) || 200));
+
+    await pool.query(`
+      INSERT INTO broker_configs (key_id, exchange, api_key_enc, api_secret_enc, max_position_usd, max_leverage, daily_loss_limit_usd, is_active)
+      VALUES ($1, 'binance_futures', $2, $3, $4, $5, $6, 1)
+      ON CONFLICT (key_id, exchange) DO UPDATE SET
+        api_key_enc = EXCLUDED.api_key_enc,
+        api_secret_enc = EXCLUDED.api_secret_enc,
+        max_position_usd = EXCLUDED.max_position_usd,
+        max_leverage = EXCLUDED.max_leverage,
+        daily_loss_limit_usd = EXCLUDED.daily_loss_limit_usd,
+        is_active = 1,
+        created_at = NOW()
+    `, [req.license.id, keyEnc, secretEnc, maxPos, maxLev, dailyLim]);
+
+    res.json({
+      ok: true,
+      balance: accountTest.totalWalletBalance,
+      available: accountTest.availableBalance,
+      maxPositionUsd: maxPos,
+      maxLeverage: maxLev,
+      dailyLossLimitUsd: dailyLim
+    });
+  } catch (err) {
+    console.error('[Broker] connect error:', err);
+    res.status(500).json({ error: 'Error al conectar broker: ' + err.message });
+  }
+});
+
+// Get broker status (balance, positions, limits)
+app.get('/api/broker/status', verifyToken, brokerLimiter, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
+      [req.license.id]
+    );
+    if (rows.length === 0) return res.json({ connected: false });
+
+    const cfg = rows[0];
+    const apiKey = broker.decrypt(cfg.api_key_enc);
+    const apiSecret = broker.decrypt(cfg.api_secret_enc);
+
+    const account = await broker.getAccountInfo(apiKey, apiSecret);
+
+    // Reset daily loss if > 24h old
+    const resetAt = new Date(cfg.daily_reset_at);
+    const hoursSince = (Date.now() - resetAt.getTime()) / 3600000;
+    let dailyLossCurrent = parseFloat(cfg.daily_loss_current || 0);
+    if (hoursSince >= 24) {
+      await pool.query('UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW() WHERE id = $1', [cfg.id]);
+      dailyLossCurrent = 0;
+    }
+
+    res.json({
+      connected: true,
+      exchange: cfg.exchange,
+      totalBalance: account.totalWalletBalance,
+      availableBalance: account.availableBalance,
+      unrealizedPnl: account.totalUnrealizedProfit,
+      positions: account.positions,
+      limits: {
+        maxPositionUsd: parseFloat(cfg.max_position_usd),
+        maxLeverage: parseInt(cfg.max_leverage),
+        dailyLossLimitUsd: parseFloat(cfg.daily_loss_limit_usd),
+        dailyLossCurrent
+      }
+    });
+  } catch (err) {
+    console.error('[Broker] status error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Place a real trade (market entry + TP + SL)
+app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res) => {
+  try {
+    const { symbol, side, usdAmount, leverage, tp, sl, currentPrice } = req.body;
+    if (!symbol || !side || !usdAmount || !leverage || !tp || !sl || !currentPrice) {
+      return res.status(400).json({ error: 'Parámetros incompletos' });
+    }
+
+    const { rows } = await pool.query(
+      'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
+      [req.license.id]
+    );
+    if (rows.length === 0) return res.status(400).json({ error: 'Broker no conectado' });
+
+    const cfg = rows[0];
+
+    // Enforce server-side limits
+    const maxPos = parseFloat(cfg.max_position_usd);
+    const maxLev = parseInt(cfg.max_leverage);
+    const dailyLim = parseFloat(cfg.daily_loss_limit_usd);
+    let dailyLoss = parseFloat(cfg.daily_loss_current || 0);
+
+    // Reset daily loss if > 24h
+    const resetAt = new Date(cfg.daily_reset_at);
+    if ((Date.now() - resetAt.getTime()) / 3600000 >= 24) {
+      await pool.query('UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW() WHERE id = $1', [cfg.id]);
+      dailyLoss = 0;
+    }
+
+    if (parseFloat(usdAmount) > maxPos) {
+      return res.status(400).json({ error: `Monto excede el límite: $${maxPos} max` });
+    }
+    if (parseInt(leverage) > maxLev) {
+      return res.status(400).json({ error: `Leverage excede el límite: ${maxLev}x max` });
+    }
+    if (dailyLoss >= dailyLim) {
+      return res.status(400).json({ error: `Límite diario de pérdida alcanzado: $${dailyLim}. Se resetea en 24h.` });
+    }
+
+    const apiKey = broker.decrypt(cfg.api_key_enc);
+    const apiSecret = broker.decrypt(cfg.api_secret_enc);
+
+    const result = await broker.placeTradeWithTPSL(apiKey, apiSecret, {
+      symbol, side, usdAmount: parseFloat(usdAmount),
+      leverage: parseInt(leverage), tp: parseFloat(tp), sl: parseFloat(sl),
+      currentPrice: parseFloat(currentPrice)
+    });
+
+    // Log the trade
+    await pool.query(`
+      INSERT INTO broker_trade_log (key_id, symbol, side, usd_amount, leverage, entry_price, tp_price, sl_price, binance_order_id, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'placed')
+    `, [
+      req.license.id, symbol, side, parseFloat(usdAmount), parseInt(leverage),
+      parseFloat(currentPrice), parseFloat(tp), parseFloat(sl),
+      String(result.entry.orderId || '')
+    ]);
+
+    await pool.query('UPDATE broker_configs SET last_used = NOW() WHERE id = $1', [cfg.id]);
+
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error('[Broker] place-order error:', err);
+    // Log the error too
+    try {
+      await pool.query(`
+        INSERT INTO broker_trade_log (key_id, symbol, side, usd_amount, leverage, status, error_msg)
+        VALUES ($1, $2, $3, $4, $5, 'error', $6)
+      `, [req.license.id, req.body.symbol, req.body.side, req.body.usdAmount, req.body.leverage, err.message]);
+    } catch (e) {}
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Close all positions (panic button)
+app.post('/api/broker/close-all', verifyToken, brokerLimiter, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
+      [req.license.id]
+    );
+    if (rows.length === 0) return res.status(400).json({ error: 'Broker no conectado' });
+
+    const cfg = rows[0];
+    const apiKey = broker.decrypt(cfg.api_key_enc);
+    const apiSecret = broker.decrypt(cfg.api_secret_enc);
+
+    const results = await broker.closeAllPositions(apiKey, apiSecret);
+    res.json({ ok: true, closed: results });
+  } catch (err) {
+    console.error('[Broker] close-all error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Disconnect broker (deletes encrypted keys)
+app.post('/api/broker/disconnect', verifyToken, brokerLimiter, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM broker_configs WHERE key_id = $1', [req.license.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get trade history (last 50)
+app.get('/api/broker/history', verifyToken, brokerLimiter, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT symbol, side, usd_amount, leverage, entry_price, tp_price, sl_price, status, error_msg, created_at FROM broker_trade_log WHERE key_id = $1 ORDER BY created_at DESC LIMIT 50',
+      [req.license.id]
+    );
+    res.json({ trades: rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════
 //  START
 // ════════════════════════════════════════════════════
 
+let brokerOk = false;
 async function start() {
   try {
+    // Initialize broker encryption key
+    brokerOk = broker.initMasterKey();
+    if (!brokerOk) {
+      console.warn('[Broker] Real trading DISABLED (set BROKER_MASTER_KEY in .env to enable)');
+    }
     await initDB();
     app.listen(PORT, () => {
       console.log(`\n  ╔══════════════════════════════════════╗`);
@@ -1067,6 +1303,7 @@ async function start() {
       console.log(`  ║   Stripe: ${stripe ? 'Configured' : 'Not configured'}             ║`);
       console.log(`  ║   MP:     ${MP_ACCESS_TOKEN ? 'Configured' : 'Not configured'}             ║`);
       console.log(`  ║   USDT:   ${NOWPAYMENTS_API_KEY ? 'NOWPayments OK' : 'Manual only'}          ║`);
+      console.log(`  ║   Broker: ${brokerOk ? 'Binance Futures ON' : 'DISABLED'}         ║`);
       console.log(`  ╚══════════════════════════════════════╝\n`);
     });
   } catch (err) {
