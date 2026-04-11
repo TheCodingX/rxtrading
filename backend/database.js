@@ -78,6 +78,48 @@ async function initDB() {
 
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_paper_key ON user_paper_data(key_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_user_sighist_key ON user_signal_history(key_id)`);
+
+  // ══ BROKER INTEGRATION — Encrypted API keys per VIP user ══
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS broker_configs (
+      id SERIAL PRIMARY KEY,
+      key_id INTEGER NOT NULL REFERENCES license_keys(id) ON DELETE CASCADE,
+      exchange TEXT NOT NULL DEFAULT 'binance_futures',
+      api_key_enc TEXT NOT NULL,
+      api_secret_enc TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      max_position_usd NUMERIC(10,2) DEFAULT 500,
+      max_leverage INTEGER DEFAULT 10,
+      daily_loss_limit_usd NUMERIC(10,2) DEFAULT 200,
+      daily_loss_current NUMERIC(10,2) DEFAULT 0,
+      daily_reset_at TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      last_used TIMESTAMPTZ DEFAULT NULL,
+      UNIQUE(key_id, exchange)
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS broker_trade_log (
+      id SERIAL PRIMARY KEY,
+      key_id INTEGER NOT NULL REFERENCES license_keys(id) ON DELETE CASCADE,
+      symbol TEXT NOT NULL,
+      side TEXT NOT NULL,
+      usd_amount NUMERIC(10,2),
+      leverage INTEGER,
+      entry_price NUMERIC(20,8),
+      tp_price NUMERIC(20,8),
+      sl_price NUMERIC(20,8),
+      binance_order_id TEXT,
+      status TEXT DEFAULT 'placed',
+      error_msg TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_broker_key ON broker_configs(key_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_broker_log_key ON broker_trade_log(key_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_broker_log_created ON broker_trade_log(created_at)`);
 }
 
 module.exports = { pool, initDB };
