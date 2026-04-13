@@ -206,11 +206,9 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
     quantity = roundToStep(symbolInfo.maxQty, symbolInfo.stepSize);
   }
 
-  const tpPrice = roundToTick(tp, symbolInfo.tickSize);
-  const slPrice = roundToTick(sl, symbolInfo.tickSize);
   const closeSide = side === 'BUY' ? 'SELL' : 'BUY';
 
-  // 1. Entry market order
+  // 1. Entry market order FIRST — get the ACTUAL fill price
   const entryOrder = await binanceRequest('POST', '/fapi/v1/order', {
     symbol: symbol.toUpperCase(),
     side,
@@ -218,16 +216,42 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
     quantity
   }, apiKey, apiSecret, true);
 
+  // Get actual fill price from the entry order
+  const actualEntry = parseFloat(entryOrder.avgPrice) || currentPrice;
+
+  // ═══ CRITICAL FIX: Recalculate TP/SL relative to ACTUAL entry price ═══
+  // This preserves the R:R regardless of entry delay/slippage
+  // Original distances: tpDist = |tp - signalPrice|, slDist = |sl - signalPrice|
+  const tpDist = Math.abs(tp - currentPrice);
+  const slDist = Math.abs(sl - currentPrice);
+
+  let adjustedTP, adjustedSL;
+  if (side === 'BUY') {
+    adjustedTP = actualEntry + tpDist;  // TP above entry by same distance
+    adjustedSL = actualEntry - slDist;  // SL below entry by same distance
+  } else {
+    adjustedTP = actualEntry - tpDist;  // TP below entry by same distance
+    adjustedSL = actualEntry + slDist;  // SL above entry by same distance
+  }
+
+  const tpPrice = roundToTick(adjustedTP, symbolInfo.tickSize);
+  const slPrice = roundToTick(adjustedSL, symbolInfo.tickSize);
+
+  console.log(`[Broker] ${symbol} ${side}: signal@${currentPrice} → actual@${actualEntry} | TP: ${tp}→${tpPrice} | SL: ${sl}→${slPrice} | R:R preserved`);
+
   const result = {
     entry: entryOrder,
+    actualEntry,
     tp: null,
     sl: null,
+    tpPrice,
+    slPrice,
     quantity,
     symbol,
     side
   };
 
-  // 2. Take Profit (reduce-only stop-market)
+  // 2. Take Profit (reduce-only stop-market) — uses ADJUSTED price
   try {
     result.tp = await binanceRequest('POST', '/fapi/v1/order', {
       symbol: symbol.toUpperCase(),
@@ -242,7 +266,7 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
     result.tpError = e.message;
   }
 
-  // 3. Stop Loss (reduce-only stop-market)
+  // 3. Stop Loss (reduce-only stop-market) — uses ADJUSTED price
   try {
     result.sl = await binanceRequest('POST', '/fapi/v1/order', {
       symbol: symbol.toUpperCase(),
