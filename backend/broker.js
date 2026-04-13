@@ -48,7 +48,10 @@ function decrypt(blob) {
 }
 
 // ═══ BINANCE FUTURES API CLIENT ═══
-const BINANCE_HOST = 'fapi.binance.com';
+// Use BINANCE_TESTNET=true in env to switch to testnet
+const BINANCE_HOST = process.env.BINANCE_TESTNET === 'true'
+  ? 'testnet.binancefuture.com'
+  : 'fapi.binance.com';
 
 function signQuery(params, secret) {
   const query = Object.keys(params)
