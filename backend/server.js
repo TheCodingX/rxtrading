@@ -1104,7 +1104,7 @@ app.post('/api/broker/connect', verifyToken, brokerLimiter, async (req, res) => 
         daily_loss_limit_usd = EXCLUDED.daily_loss_limit_usd,
         is_active = 1,
         created_at = NOW()
-    `, [req.license.id, keyEnc, secretEnc, maxPos, maxLev, dailyLim]);
+    `, [req.license.keyId, keyEnc, secretEnc, maxPos, maxLev, dailyLim]);
 
     res.json({
       ok: true,
@@ -1125,7 +1125,7 @@ app.get('/api/broker/status', verifyToken, brokerLimiter, async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
-      [req.license.id]
+      [req.license.keyId]
     );
     if (rows.length === 0) return res.json({ connected: false });
 
@@ -1174,7 +1174,7 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
 
     const { rows } = await pool.query(
       'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
-      [req.license.id]
+      [req.license.keyId]
     );
     if (rows.length === 0) return res.status(400).json({ error: 'Broker no conectado' });
 
@@ -1217,7 +1217,7 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
       INSERT INTO broker_trade_log (key_id, symbol, side, usd_amount, leverage, entry_price, tp_price, sl_price, binance_order_id, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'placed')
     `, [
-      req.license.id, symbol, side, parseFloat(usdAmount), parseInt(leverage),
+      req.license.keyId, symbol, side, parseFloat(usdAmount), parseInt(leverage),
       parseFloat(currentPrice), parseFloat(tp), parseFloat(sl),
       String(result.entry.orderId || '')
     ]);
@@ -1232,7 +1232,7 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
       await pool.query(`
         INSERT INTO broker_trade_log (key_id, symbol, side, usd_amount, leverage, status, error_msg)
         VALUES ($1, $2, $3, $4, $5, 'error', $6)
-      `, [req.license.id, req.body.symbol, req.body.side, req.body.usdAmount, req.body.leverage, err.message]);
+      `, [req.license.keyId, req.body.symbol, req.body.side, req.body.usdAmount, req.body.leverage, err.message]);
     } catch (e) {}
     res.status(500).json({ error: err.message });
   }
@@ -1243,7 +1243,7 @@ app.post('/api/broker/close-all', verifyToken, brokerLimiter, async (req, res) =
   try {
     const { rows } = await pool.query(
       'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
-      [req.license.id]
+      [req.license.keyId]
     );
     if (rows.length === 0) return res.status(400).json({ error: 'Broker no conectado' });
 
@@ -1262,7 +1262,7 @@ app.post('/api/broker/close-all', verifyToken, brokerLimiter, async (req, res) =
 // Disconnect broker (deletes encrypted keys)
 app.post('/api/broker/disconnect', verifyToken, brokerLimiter, async (req, res) => {
   try {
-    await pool.query('DELETE FROM broker_configs WHERE key_id = $1', [req.license.id]);
+    await pool.query('DELETE FROM broker_configs WHERE key_id = $1', [req.license.keyId]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1274,7 +1274,7 @@ app.get('/api/broker/history', verifyToken, brokerLimiter, async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT symbol, side, usd_amount, leverage, entry_price, tp_price, sl_price, status, error_msg, created_at FROM broker_trade_log WHERE key_id = $1 ORDER BY created_at DESC LIMIT 50',
-      [req.license.id]
+      [req.license.keyId]
     );
     res.json({ trades: rows });
   } catch (err) {
