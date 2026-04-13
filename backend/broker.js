@@ -159,6 +159,7 @@ async function getSymbolInfo(symbol) {
     symbol: sym.symbol,
     stepSize: parseFloat(lotFilter.stepSize),
     minQty: parseFloat(lotFilter.minQty),
+    maxQty: parseFloat(lotFilter.maxQty),
     tickSize: parseFloat(priceFilter.tickSize),
     quantityPrecision: sym.quantityPrecision,
     pricePrecision: sym.pricePrecision
@@ -194,10 +195,15 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   // Calculate quantity: usdAmount * leverage / price
   const notional = usdAmount * leverage;
   const rawQty = notional / currentPrice;
-  const quantity = roundToStep(rawQty, symbolInfo.stepSize);
+  let quantity = roundToStep(rawQty, symbolInfo.stepSize);
 
   if (quantity < symbolInfo.minQty) {
     throw new Error(`Position too small for ${symbol}. Minimum: ${symbolInfo.minQty}`);
+  }
+  // Cap quantity to maxQty (testnet has lower limits than production)
+  if (symbolInfo.maxQty && quantity > symbolInfo.maxQty) {
+    console.log(`[Broker] ${symbol}: qty ${quantity} > maxQty ${symbolInfo.maxQty}, capping to max`);
+    quantity = roundToStep(symbolInfo.maxQty, symbolInfo.stepSize);
   }
 
   const tpPrice = roundToTick(tp, symbolInfo.tickSize);
