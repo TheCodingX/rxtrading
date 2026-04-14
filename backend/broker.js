@@ -251,9 +251,8 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
     side
   };
 
-  // 2. Take Profit (reduce-only stop-market) — uses ADJUSTED price
-  // FIX: Use CONTRACT_PRICE (last trade price) instead of MARK_PRICE
-  // MARK_PRICE diverges from the actual trading price and causes premature SL hits
+  // 2. Take Profit — try TAKE_PROFIT_MARKET first, fallback to TAKE_PROFIT with quantity
+  // Uses CONTRACT_PRICE (last trade price) instead of MARK_PRICE
   try {
     result.tp = await binanceRequest('POST', '/fapi/v1/order', {
       symbol: symbol.toUpperCase(),
@@ -264,11 +263,25 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
       workingType: 'CONTRACT_PRICE'
     }, apiKey, apiSecret, true);
   } catch (e) {
-    result.tpError = e.message;
+    // Fallback: TAKE_PROFIT with explicit quantity + limit price (testnet compatible)
+    try {
+      result.tp = await binanceRequest('POST', '/fapi/v1/order', {
+        symbol: symbol.toUpperCase(),
+        side: closeSide,
+        type: 'TAKE_PROFIT',
+        stopPrice: tpPrice,
+        price: tpPrice,
+        quantity,
+        reduceOnly: 'true',
+        timeInForce: 'GTC',
+        workingType: 'CONTRACT_PRICE'
+      }, apiKey, apiSecret, true);
+    } catch (e2) {
+      result.tpError = e2.message;
+    }
   }
 
-  // 3. Stop Loss (reduce-only stop-market) — uses ADJUSTED price
-  // FIX: Use CONTRACT_PRICE to match actual trading price (not mark price)
+  // 3. Stop Loss — try STOP_MARKET first, fallback to STOP with quantity
   try {
     result.sl = await binanceRequest('POST', '/fapi/v1/order', {
       symbol: symbol.toUpperCase(),
@@ -279,7 +292,22 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
       workingType: 'CONTRACT_PRICE'
     }, apiKey, apiSecret, true);
   } catch (e) {
-    result.slError = e.message;
+    // Fallback: STOP with explicit quantity + limit price (testnet compatible)
+    try {
+      result.sl = await binanceRequest('POST', '/fapi/v1/order', {
+        symbol: symbol.toUpperCase(),
+        side: closeSide,
+        type: 'STOP',
+        stopPrice: slPrice,
+        price: slPrice,
+        quantity,
+        reduceOnly: 'true',
+        timeInForce: 'GTC',
+        workingType: 'CONTRACT_PRICE'
+      }, apiKey, apiSecret, true);
+    } catch (e2) {
+      result.slError = e2.message;
+    }
   }
 
   return result;
