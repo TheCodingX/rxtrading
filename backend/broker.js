@@ -252,6 +252,8 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   };
 
   // 2. Take Profit (reduce-only stop-market) — uses ADJUSTED price
+  // FIX: Use CONTRACT_PRICE (last trade price) instead of MARK_PRICE
+  // MARK_PRICE diverges from the actual trading price and causes premature SL hits
   try {
     result.tp = await binanceRequest('POST', '/fapi/v1/order', {
       symbol: symbol.toUpperCase(),
@@ -259,14 +261,14 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
       type: 'TAKE_PROFIT_MARKET',
       stopPrice: tpPrice,
       closePosition: 'true',
-      workingType: 'MARK_PRICE',
-      priceProtect: 'true'
+      workingType: 'CONTRACT_PRICE'
     }, apiKey, apiSecret, true);
   } catch (e) {
     result.tpError = e.message;
   }
 
   // 3. Stop Loss (reduce-only stop-market) — uses ADJUSTED price
+  // FIX: Use CONTRACT_PRICE to match actual trading price (not mark price)
   try {
     result.sl = await binanceRequest('POST', '/fapi/v1/order', {
       symbol: symbol.toUpperCase(),
@@ -274,8 +276,7 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
       type: 'STOP_MARKET',
       stopPrice: slPrice,
       closePosition: 'true',
-      workingType: 'MARK_PRICE',
-      priceProtect: 'true'
+      workingType: 'CONTRACT_PRICE'
     }, apiKey, apiSecret, true);
   } catch (e) {
     result.slError = e.message;
