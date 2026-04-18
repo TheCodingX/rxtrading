@@ -118,6 +118,8 @@ app.use(cors({
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
     if (CORS_ORIGINS.includes(origin)) return callback(null, true);
+    // Dev: accept any localhost:* origin (covers 8090 preview, 5500, etc.)
+    if (/^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) return callback(null, true);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true
@@ -1280,6 +1282,69 @@ app.get('/api/broker/history', verifyToken, brokerLimiter, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ════════════════════════════════════════════════════
+//  MACRO DATA (v42 PRO+ SPX risk-off filter)
+// ════════════════════════════════════════════════════
+// Cached in memory to avoid hammering Yahoo. TTL 1h.
+// Fallback: returns 0 change if Yahoo fails (filter becomes no-op).
+const https = require('https');
+let _spxCache = { chg: 0, close: 0, ts: 0, stale: true };
+const SPX_TTL_MS = 60 * 60 * 1000; // 1h
+
+function _fetchYahoo(url) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => resolve({ status: res.statusCode, data }));
+    });
+    req.on('error', reject);
+    req.setTimeout(8000, () => { req.destroy(new Error('timeout')); });
+    req.end();
+  });
+}
+
+async function refreshSpx() {
+  try {
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - 5 * 86400; // last 5 days to guarantee 2 close values across weekends
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=${start}&period2=${end}&interval=1d`;
+    const r = await _fetchYahoo(url);
+    if (r.status !== 200) throw new Error('yahoo status ' + r.status);
+    const j = JSON.parse(r.data);
+    const closes = (((j.chart || {}).result || [])[0] || {}).indicators;
+    const series = closes && closes.quote && closes.quote[0] && closes.quote[0].close;
+    if (!series || series.length < 2) throw new Error('no close data');
+    const clean = series.filter(v => v != null && isFinite(v));
+    if (clean.length < 2) throw new Error('no valid closes');
+    const cur = clean[clean.length - 1], prev = clean[clean.length - 2];
+    const chg = ((cur - prev) / prev) * 100;
+    _spxCache = { chg: +chg.toFixed(3), close: +cur.toFixed(2), ts: Date.now(), stale: false };
+    return _spxCache;
+  } catch (err) {
+    console.warn('[Macro SPX] refresh failed:', err.message);
+    _spxCache.stale = true;
+    return _spxCache;
+  }
+}
+
+// Public market data endpoint — open CORS (no sensitive info)
+app.get('/api/macro/spx', async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Cache-Control', 'public, max-age=900'); // 15min browser cache
+  const age = Date.now() - _spxCache.ts;
+  if (age > SPX_TTL_MS || _spxCache.ts === 0) {
+    await refreshSpx();
+  }
+  res.json({
+    chg24h: _spxCache.chg,
+    close: _spxCache.close,
+    asOf: _spxCache.ts,
+    ageMs: Date.now() - _spxCache.ts,
+    stale: _spxCache.stale || (Date.now() - _spxCache.ts > 12 * 60 * 60 * 1000)
+  });
 });
 
 // ════════════════════════════════════════════════════
