@@ -497,6 +497,20 @@ app.post('/api/keys/refresh', generalLimiter, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════
+//  HEALTH CHECK — public
+// ════════════════════════════════════════════════════
+app.get(['/health', '/api/health'], (req, res) => {
+  res.json({
+    ok: true,
+    service: 'rxtrading-backend',
+    mode: process.env.BINANCE_TESTNET === 'true' ? 'testnet' : 'mainnet',
+    env: process.env.NODE_ENV || 'development',
+    uptime: Math.round(process.uptime()),
+    ts: new Date().toISOString()
+  });
+});
+
+// ════════════════════════════════════════════════════
 //  PAYMENT ENDPOINTS
 // ════════════════════════════════════════════════════
 
