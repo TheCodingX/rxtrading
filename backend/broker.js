@@ -155,12 +155,14 @@ async function getSymbolInfo(symbol) {
   if (!sym) throw new Error('Symbol not found: ' + symbol);
   const lotFilter = sym.filters.find(f => f.filterType === 'LOT_SIZE');
   const priceFilter = sym.filters.find(f => f.filterType === 'PRICE_FILTER');
+  const minNotionalFilter = sym.filters.find(f => f.filterType === 'MIN_NOTIONAL');
   return {
     symbol: sym.symbol,
     stepSize: parseFloat(lotFilter.stepSize),
     minQty: parseFloat(lotFilter.minQty),
     maxQty: parseFloat(lotFilter.maxQty),
     tickSize: parseFloat(priceFilter.tickSize),
+    minNotional: minNotionalFilter ? parseFloat(minNotionalFilter.notional) : 5,
     quantityPrecision: sym.quantityPrecision,
     pricePrecision: sym.pricePrecision
   };
@@ -198,12 +200,17 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   let quantity = roundToStep(rawQty, symbolInfo.stepSize);
 
   if (quantity < symbolInfo.minQty) {
-    throw new Error(`Position too small for ${symbol}. Minimum: ${symbolInfo.minQty}`);
+    throw new Error(`Position too small for ${symbol}. Minimum qty: ${symbolInfo.minQty}`);
   }
   // Cap quantity to maxQty (testnet has lower limits than production)
   if (symbolInfo.maxQty && quantity > symbolInfo.maxQty) {
     console.log(`[Broker] ${symbol}: qty ${quantity} > maxQty ${symbolInfo.maxQty}, capping to max`);
     quantity = roundToStep(symbolInfo.maxQty, symbolInfo.stepSize);
+  }
+  // CRITICAL: Validate minNotional (Binance rejects orders below this)
+  const notionalValue = quantity * currentPrice;
+  if (symbolInfo.minNotional && notionalValue < symbolInfo.minNotional) {
+    throw new Error(`Notional too small for ${symbol}. Minimum: $${symbolInfo.minNotional} (got $${notionalValue.toFixed(2)})`);
   }
 
   const closeSide = side === 'BUY' ? 'SELL' : 'BUY';
@@ -251,19 +258,22 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
     side
   };
 
-  // 2. Take Profit — try TAKE_PROFIT_MARKET first, fallback to TAKE_PROFIT with quantity
-  // Uses CONTRACT_PRICE (last trade price) instead of MARK_PRICE
+  // 2. Take Profit — use TAKE_PROFIT_MARKET with reduceOnly + quantity (Binance Futures standard)
+  // NOTE: closePosition:'true' is NOT supported on all endpoints (causes "Order type not supported")
+  // Using reduceOnly+quantity works reliably on both testnet and mainnet
   try {
     result.tp = await binanceRequest('POST', '/fapi/v1/order', {
       symbol: symbol.toUpperCase(),
       side: closeSide,
       type: 'TAKE_PROFIT_MARKET',
       stopPrice: tpPrice,
-      closePosition: 'true',
-      workingType: 'CONTRACT_PRICE'
+      quantity,
+      reduceOnly: 'true',
+      workingType: 'CONTRACT_PRICE',
+      priceProtect: 'true'
     }, apiKey, apiSecret, true);
   } catch (e) {
-    // Fallback: TAKE_PROFIT with explicit quantity + limit price (testnet compatible)
+    // Fallback: TAKE_PROFIT limit order with explicit quantity
     try {
       result.tp = await binanceRequest('POST', '/fapi/v1/order', {
         symbol: symbol.toUpperCase(),
@@ -278,21 +288,24 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
       }, apiKey, apiSecret, true);
     } catch (e2) {
       result.tpError = e2.message;
+      console.error(`[Broker] TP failed for ${symbol}:`, e.message, '| Fallback:', e2.message);
     }
   }
 
-  // 3. Stop Loss — try STOP_MARKET first, fallback to STOP with quantity
+  // 3. Stop Loss — use STOP_MARKET with reduceOnly + quantity (Binance Futures standard)
   try {
     result.sl = await binanceRequest('POST', '/fapi/v1/order', {
       symbol: symbol.toUpperCase(),
       side: closeSide,
       type: 'STOP_MARKET',
       stopPrice: slPrice,
-      closePosition: 'true',
-      workingType: 'CONTRACT_PRICE'
+      quantity,
+      reduceOnly: 'true',
+      workingType: 'CONTRACT_PRICE',
+      priceProtect: 'true'
     }, apiKey, apiSecret, true);
   } catch (e) {
-    // Fallback: STOP with explicit quantity + limit price (testnet compatible)
+    // Fallback: STOP limit order with explicit quantity
     try {
       result.sl = await binanceRequest('POST', '/fapi/v1/order', {
         symbol: symbol.toUpperCase(),
@@ -307,6 +320,21 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
       }, apiKey, apiSecret, true);
     } catch (e2) {
       result.slError = e2.message;
+      console.error(`[Broker] SL failed for ${symbol}:`, e.message, '| Fallback:', e2.message);
+      // CRITICAL: SL failed — cancel all orders + close position to avoid unprotected exposure
+      try {
+        await binanceRequest('DELETE', '/fapi/v1/allOpenOrders', { symbol: symbol.toUpperCase() }, apiKey, apiSecret, true);
+        await binanceRequest('POST', '/fapi/v1/order', {
+          symbol: symbol.toUpperCase(),
+          side: closeSide,
+          type: 'MARKET',
+          quantity,
+          reduceOnly: 'true'
+        }, apiKey, apiSecret, true);
+        result.emergencyClosed = true;
+      } catch (e3) {
+        result.emergencyCloseError = e3.message;
+      }
     }
   }
 
@@ -343,16 +371,45 @@ async function closePosition(apiKey, apiSecret, symbol) {
 async function closeAllPositions(apiKey, apiSecret) {
   const account = await binanceRequest('GET', '/fapi/v2/account', {}, apiKey, apiSecret, true);
   const open = account.positions.filter(p => parseFloat(p.positionAmt) !== 0);
-  const results = [];
-  for (const pos of open) {
+  // PARALLEL closure for fast panic response — critical in crash scenarios
+  // Sort by absolute unrealized loss desc (close biggest losers first)
+  open.sort((a, b) => parseFloat(a.unRealizedProfit) - parseFloat(b.unRealizedProfit));
+  const results = await Promise.all(open.map(async (pos) => {
     try {
-      const r = await closePosition(apiKey, apiSecret, pos.symbol);
-      results.push({ symbol: pos.symbol, ok: true, order: r });
+      // Timeout per position: 5s max
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Close timeout 5s')), 5000));
+      const closePromise = closePosition(apiKey, apiSecret, pos.symbol);
+      const r = await Promise.race([closePromise, timeoutPromise]);
+      return { symbol: pos.symbol, ok: true, order: r };
     } catch (e) {
-      results.push({ symbol: pos.symbol, ok: false, error: e.message });
+      return { symbol: pos.symbol, ok: false, error: e.message };
     }
-  }
+  }));
   return results;
+}
+
+// listenKey management for userDataStream (real-time balance/position/order push)
+async function createListenKey(apiKey) {
+  const BINANCE_HOST = process.env.BINANCE_TESTNET === 'true' ? 'testnet.binancefuture.com' : 'fapi.binance.com';
+  const https = require('https');
+  return new Promise((resolve, reject) => {
+    const req = https.request({ host: BINANCE_HOST, path: '/fapi/v1/listenKey', method: 'POST', headers: { 'X-MBX-APIKEY': apiKey } }, (res) => {
+      let data = ''; res.on('data', (c) => data += c);
+      res.on('end', () => { try { const j = JSON.parse(data); if (j.listenKey) resolve(j.listenKey); else reject(new Error(j.msg || 'no listenKey')); } catch (e) { reject(e); } });
+    });
+    req.on('error', reject); req.end();
+  });
+}
+async function keepAliveListenKey(apiKey) {
+  const BINANCE_HOST = process.env.BINANCE_TESTNET === 'true' ? 'testnet.binancefuture.com' : 'fapi.binance.com';
+  const https = require('https');
+  return new Promise((resolve, reject) => {
+    const req = https.request({ host: BINANCE_HOST, path: '/fapi/v1/listenKey', method: 'PUT', headers: { 'X-MBX-APIKEY': apiKey } }, (res) => {
+      let data = ''; res.on('data', (c) => data += c);
+      res.on('end', () => resolve(true));
+    });
+    req.on('error', reject); req.end();
+  });
 }
 
 module.exports = {
@@ -365,5 +422,7 @@ module.exports = {
   placeTradeWithTPSL,
   cancelAllOrders,
   closePosition,
-  closeAllPositions
+  closeAllPositions,
+  createListenKey,
+  keepAliveListenKey
 };

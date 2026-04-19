@@ -112,7 +112,30 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 //  GLOBAL MIDDLEWARE
 // ════════════════════════════════════════════════════
 
-app.use(helmet());
+// Hardened helmet config with CSP
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://js.stripe.com", "https://www.gstatic.com", "https://*.firebaseapp.com", "https://*.firebaseio.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: ["'self'", "https://api.binance.com", "https://fapi.binance.com", "https://testnet.binancefuture.com", "https://stream.binance.com", "wss://stream.binance.com", "wss://fstream.binance.com", "wss://fstream.binancefuture.com", "https://api.coingecko.com", "https://api.alternative.me", "https://query1.finance.yahoo.com", "https://*.googleapis.com", "https://*.firebaseio.com", "https://*.firebaseapp.com", "wss://*.firebaseio.com", "https://identitytoolkit.googleapis.com", "https://api.stripe.com", "https://api.mercadopago.com", "https://api.nowpayments.io"],
+      frameSrc: ["'self'", "https://js.stripe.com", "https://hooks.stripe.com"],
+      workerSrc: ["'self'", "blob:"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+      upgradeInsecureRequests: []
+    }
+  },
+  crossOriginEmbedderPolicy: false, // Allow Firebase iframe/worker loading
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
+}));
 app.use(cors({
   origin: function(origin, callback) {
     // Allow requests with no origin (mobile apps, curl, etc.)
@@ -125,6 +148,13 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '200kb' }));
+// Lightweight cookie parser (no external dep required)
+app.use((req, res, next) => {
+  req.cookies = {};
+  const c = req.headers.cookie;
+  if (c) c.split(';').forEach(s => { const [k, ...v] = s.trim().split('='); if (k) req.cookies[k] = decodeURIComponent((v.join('=') || '').trim()); });
+  next();
+});
 
 // Trust proxy for rate limiting behind reverse proxy
 app.set('trust proxy', 1);
@@ -161,6 +191,14 @@ const paymentLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiadas peticiones de pago. Intenta en 15 minutos.' }
+});
+
+const macroLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30, // 30 req/min per IP — protects against scraper abuse
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Rate limit en macro data. Intenta en 1 minuto.' }
 });
 
 app.use('/api/', generalLimiter);
@@ -289,10 +327,25 @@ app.post('/api/keys/validate', validateLimiter, async (req, res) => {
       );
 
       const token = jwt.sign(
-        { keyId: keyRow.id, code: cleanCode, name: keyRow.owner_name, fp: fingerprint },
+        { keyId: keyRow.id, code: cleanCode, name: keyRow.owner_name, fp: fingerprint, type: 'access' },
         JWT_SECRET,
-        { expiresIn: '30d' }
+        { expiresIn: '7d' } // Shorter-lived access token
       );
+      const refreshToken = jwt.sign(
+        { keyId: keyRow.id, fp: fingerprint, type: 'refresh' },
+        JWT_SECRET,
+        { expiresIn: '90d' }
+      );
+      // Set refresh token as httpOnly cookie (cannot be read via XSS)
+      try {
+        res.cookie('rx_refresh', refreshToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: 90 * 24 * 60 * 60 * 1000,
+          path: '/api/keys/refresh'
+        });
+      } catch(e){}
 
       return res.json({
         valid: true,
@@ -321,10 +374,24 @@ app.post('/api/keys/validate', validateLimiter, async (req, res) => {
     );
 
     const token = jwt.sign(
-      { keyId: keyRow.id, code: cleanCode, name: keyRow.owner_name, fp: fingerprint },
+      { keyId: keyRow.id, code: cleanCode, name: keyRow.owner_name, fp: fingerprint, type: 'access' },
       JWT_SECRET,
-      { expiresIn: '30d' }
+      { expiresIn: '7d' }
     );
+    const refreshToken = jwt.sign(
+      { keyId: keyRow.id, fp: fingerprint, type: 'refresh' },
+      JWT_SECRET,
+      { expiresIn: '90d' }
+    );
+    try {
+      res.cookie('rx_refresh', refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 90 * 24 * 60 * 60 * 1000,
+        path: '/api/keys/refresh'
+      });
+    } catch(e){}
 
     res.json({
       valid: true,
@@ -394,10 +461,38 @@ app.post('/api/keys/logout', verifyToken, async (req, res) => {
       'UPDATE activations SET is_active = 0 WHERE key_id = $1 AND fingerprint = $2',
       [keyId, fp]
     );
+    // Clear refresh cookie
+    try { res.clearCookie('rx_refresh', { path: '/api/keys/refresh' }); } catch(e){}
     res.json({ success: true, message: 'Sesión VIP cerrada.' });
   } catch (err) {
     console.error('Error logging out:', err);
     res.status(500).json({ error: 'Error interno.' });
+  }
+});
+
+// POST /api/keys/refresh — exchange httpOnly refresh cookie for fresh access token
+app.post('/api/keys/refresh', generalLimiter, async (req, res) => {
+  const rt = req.cookies && req.cookies.rx_refresh;
+  if (!rt) return res.status(401).json({ error: 'No refresh token' });
+  try {
+    const decoded = jwt.verify(rt, JWT_SECRET);
+    if (decoded.type !== 'refresh') return res.status(401).json({ error: 'Invalid token type' });
+    // Validate activation still active
+    const { rows } = await pool.query(
+      'SELECT lk.id, lk.key_code, lk.owner_name, lk.expires_at, lk.is_revoked FROM license_keys lk JOIN activations a ON a.key_id = lk.id WHERE lk.id = $1 AND a.fingerprint = $2 AND a.is_active = 1',
+      [decoded.keyId, decoded.fp]
+    );
+    if (rows.length === 0) return res.status(401).json({ error: 'Sesión revocada' });
+    const row = rows[0];
+    if (row.is_revoked) return res.status(401).json({ error: 'Licencia revocada' });
+    const token = jwt.sign(
+      { keyId: row.id, code: row.key_code, name: row.owner_name, fp: decoded.fp, type: 'access' },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    res.json({ valid: true, token, name: row.owner_name, expiresAt: row.expires_at });
+  } catch (err) {
+    return res.status(401).json({ error: 'Refresh inválido o expirado' });
   }
 });
 
@@ -785,18 +880,31 @@ app.post('/api/admin/payments/usdt/confirm', adminLimiter, verifyAdminSecret, as
 });
 
 // GET /api/payments/status/:paymentId — Check payment status
-app.get('/api/payments/status/:paymentId', async (req, res) => {
+// SECURITY: requires session_token issued at payment creation time to prevent key_code leak
+app.get('/api/payments/status/:paymentId', paymentLimiter, async (req, res) => {
   const { paymentId } = req.params;
+  const { session_token } = req.query;
+
+  // Rate limit + session validation — only the buyer (with their session_token) can see the key
+  if (!paymentId || typeof paymentId !== 'string' || paymentId.length > 128) {
+    return res.status(400).json({ error: 'paymentId inválido.' });
+  }
 
   try {
     const { rows } = await pool.query(
-      'SELECT payment_id, status, key_code, plan_id FROM payments WHERE payment_id = $1',
+      'SELECT payment_id, status, key_code, plan_id, session_token, email FROM payments WHERE payment_id = $1',
       [paymentId]
     );
     const payment = rows[0];
 
     if (!payment) {
       return res.status(404).json({ error: 'Pago no encontrado.' });
+    }
+
+    // SECURITY: If session_token is set in DB, require it to match (prevents enumeration attacks)
+    if (payment.session_token && payment.session_token !== session_token) {
+      // Don't reveal key_code, return generic status only
+      return res.json({ status: payment.status === 'completed' ? 'completed_other_session' : payment.status });
     }
 
     if (payment.status === 'completed') {
@@ -1054,6 +1162,51 @@ app.post('/api/user/signals', syncLimiter, verifyToken, async (req, res) => {
   }
 });
 
+// GDPR/CCPA — DELETE all user data (right to erasure)
+app.post('/api/user/delete-all', syncLimiter, verifyToken, async (req, res) => {
+  const { keyId } = req.license;
+  const { confirm } = req.body;
+  if (confirm !== 'DELETE_MY_DATA') {
+    return res.status(400).json({ error: 'Envía { confirm: "DELETE_MY_DATA" } para confirmar.' });
+  }
+  try {
+    await pool.query('BEGIN');
+    await pool.query('DELETE FROM user_data WHERE key_id = $1', [keyId]).catch(()=>{});
+    await pool.query('DELETE FROM activations WHERE key_id = $1', [keyId]).catch(()=>{});
+    await pool.query('DELETE FROM broker_trade_log WHERE key_id = $1', [keyId]).catch(()=>{});
+    await pool.query('DELETE FROM broker_configs WHERE key_id = $1', [keyId]).catch(()=>{});
+    await pool.query('COMMIT');
+    res.json({ ok: true, message: 'Todos tus datos han sido eliminados. La licencia permanece activa pero sin asociaciones de datos.' });
+  } catch (err) {
+    try { await pool.query('ROLLBACK'); } catch(e){}
+    console.error('[GDPR] delete-all error:', err);
+    res.status(500).json({ error: 'Error al eliminar datos.' });
+  }
+});
+
+// GDPR — Export all user data (right to portability)
+app.get('/api/user/export', syncLimiter, verifyToken, async (req, res) => {
+  const { keyId } = req.license;
+  try {
+    const [paper, signals, tradeLog] = await Promise.all([
+      pool.query("SELECT data, updated_at FROM user_data WHERE key_id = $1 AND endpoint = 'paper'", [keyId]).then(r => r.rows[0] || null).catch(()=>null),
+      pool.query("SELECT data, updated_at FROM user_data WHERE key_id = $1 AND endpoint = 'signals'", [keyId]).then(r => r.rows[0] || null).catch(()=>null),
+      pool.query('SELECT symbol, side, usd_amount, leverage, entry_price, tp_price, sl_price, status, created_at FROM broker_trade_log WHERE key_id = $1 ORDER BY created_at DESC LIMIT 1000', [keyId]).then(r => r.rows).catch(()=>[]),
+    ]);
+    res.json({
+      exportedAt: new Date().toISOString(),
+      keyId,
+      paper,
+      signals,
+      tradeLog,
+      meta: { format: 'rxtrading-export-v1', gdprCompliant: true }
+    });
+  } catch (err) {
+    console.error('[GDPR] export error:', err);
+    res.status(500).json({ error: 'Error al exportar datos.' });
+  }
+});
+
 // ════════════════════════════════════════════════════
 //  BROKER INTEGRATION — Binance Futures real trading
 // ════════════════════════════════════════════════════
@@ -1149,6 +1302,7 @@ app.get('/api/broker/status', verifyToken, brokerLimiter, async (req, res) => {
     res.json({
       connected: true,
       exchange: cfg.exchange,
+      mode: process.env.BINANCE_TESTNET === 'true' ? 'testnet' : 'mainnet',
       totalBalance: account.totalWalletBalance,
       availableBalance: account.availableBalance,
       unrealizedPnl: account.totalUnrealizedProfit,
@@ -1188,11 +1342,23 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
     const dailyLim = parseFloat(cfg.daily_loss_limit_usd);
     let dailyLoss = parseFloat(cfg.daily_loss_current || 0);
 
-    // Reset daily loss if > 24h
+    // UTC daily reset (00:00 UTC boundary, not rolling 24h)
     const resetAt = new Date(cfg.daily_reset_at);
-    if ((Date.now() - resetAt.getTime()) / 3600000 >= 24) {
-      await pool.query('UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW() WHERE id = $1', [cfg.id]);
+    const nowUTC = new Date();
+    const todayUTC = Date.UTC(nowUTC.getUTCFullYear(), nowUTC.getUTCMonth(), nowUTC.getUTCDate());
+    const resetAtUTC = Date.UTC(resetAt.getUTCFullYear(), resetAt.getUTCMonth(), resetAt.getUTCDate());
+    if (todayUTC > resetAtUTC) {
+      await pool.query("UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW() AT TIME ZONE 'UTC', consecutive_losses = 0, circuit_breaker_until = NULL WHERE id = $1", [cfg.id]);
       dailyLoss = 0;
+    }
+
+    // Circuit breaker check — if tripped, reject trade
+    if (cfg.circuit_breaker_until) {
+      const cbUntil = new Date(cfg.circuit_breaker_until).getTime();
+      if (Date.now() < cbUntil) {
+        const remainingMin = Math.ceil((cbUntil - Date.now()) / 60000);
+        return res.status(400).json({ error: `Circuit breaker activo: ${cfg.consecutive_losses || 5} pérdidas consecutivas. Retoma en ${remainingMin}min.` });
+      }
     }
 
     if (parseFloat(usdAmount) > maxPos) {
@@ -1202,11 +1368,32 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
       return res.status(400).json({ error: `Leverage excede el límite: ${maxLev}x max` });
     }
     if (dailyLoss >= dailyLim) {
-      return res.status(400).json({ error: `Límite diario de pérdida alcanzado: $${dailyLim}. Se resetea en 24h.` });
+      return res.status(400).json({ error: `Límite diario de pérdida alcanzado: $${dailyLim}. Se resetea a 00 UTC.` });
     }
 
+    // CRITICAL: Concurrent position limit — prevent over-leverage from rapid-fire signals
     const apiKey = broker.decrypt(cfg.api_key_enc);
     const apiSecret = broker.decrypt(cfg.api_secret_enc);
+
+    try {
+      const accountSnapshot = await broker.getAccountInfo(apiKey, apiSecret);
+      const openPositions = (accountSnapshot.positions || []).filter(p => parseFloat(p.positionAmt) !== 0);
+      const maxConcurrent = parseInt(cfg.max_concurrent_positions || 4);
+      if (openPositions.length >= maxConcurrent) {
+        return res.status(400).json({ error: `Máximo ${maxConcurrent} posiciones simultáneas. Cerrá una para abrir otra.` });
+      }
+      // Total deployed notional check: sum of all open positions + this new one
+      const currentNotional = openPositions.reduce((sum, p) => sum + Math.abs(parseFloat(p.positionAmt) * parseFloat(p.entryPrice || 0)), 0);
+      const newNotional = parseFloat(usdAmount) * parseInt(leverage);
+      const totalBalance = parseFloat(accountSnapshot.totalWalletBalance || 0);
+      const maxDeployPct = parseFloat(cfg.max_capital_deployed_pct || 50) / 100;
+      if (totalBalance > 0 && (currentNotional + newNotional) > (totalBalance * maxDeployPct * parseInt(leverage))) {
+        return res.status(400).json({ error: `Exposición total excede ${Math.round(maxDeployPct*100)}% del balance.` });
+      }
+    } catch (e) {
+      console.warn('[Broker] Concurrent position check failed:', e.message);
+      // Fail open — don't block on check failure, but log
+    }
 
     const result = await broker.placeTradeWithTPSL(apiKey, apiSecret, {
       symbol, side, usdAmount: parseFloat(usdAmount),
@@ -1236,6 +1423,79 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
         VALUES ($1, $2, $3, $4, $5, 'error', $6)
       `, [req.license.keyId, req.body.symbol, req.body.side, req.body.usdAmount, req.body.leverage, err.message]);
     } catch (e) {}
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get userDataStream listenKey for real-time balance/order push (frontend connects WS directly to Binance)
+app.post('/api/broker/listen-key', verifyToken, brokerLimiter, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1', [req.license.keyId]);
+    if (rows.length === 0) return res.status(400).json({ error: 'Broker no conectado' });
+    const apiKey = broker.decrypt(rows[0].api_key_enc);
+    const listenKey = await broker.createListenKey(apiKey);
+    res.json({ ok: true, listenKey, host: process.env.BINANCE_TESTNET === 'true' ? 'wss://stream.binancefuture.com' : 'wss://fstream.binance.com' });
+  } catch (err) {
+    console.error('[Broker] listen-key error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Keep-alive listenKey (called every ~30min by frontend)
+app.post('/api/broker/listen-key/keepalive', verifyToken, brokerLimiter, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1', [req.license.keyId]);
+    if (rows.length === 0) return res.status(400).json({ error: 'Broker no conectado' });
+    const apiKey = broker.decrypt(rows[0].api_key_enc);
+    await broker.keepAliveListenKey(apiKey);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Reconcile — sync DB state with live Binance state (call after server restart or long disconnects)
+app.post('/api/broker/reconcile', verifyToken, brokerLimiter, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
+      [req.license.keyId]
+    );
+    if (rows.length === 0) return res.status(400).json({ error: 'Broker no conectado' });
+    const cfg = rows[0];
+    const apiKey = broker.decrypt(cfg.api_key_enc);
+    const apiSecret = broker.decrypt(cfg.api_secret_enc);
+
+    const account = await broker.getAccountInfo(apiKey, apiSecret);
+    const livePositions = (account.positions || []).filter(p => parseFloat(p.positionAmt) !== 0);
+
+    // Pull local open trades from log
+    const { rows: localTrades } = await pool.query(
+      "SELECT id, symbol, side, usd_amount, leverage, entry_price, status, created_at FROM broker_trade_log WHERE key_id = $1 AND status = 'placed' ORDER BY created_at DESC LIMIT 100",
+      [req.license.keyId]
+    );
+
+    // Find discrepancies
+    const liveSyms = new Set(livePositions.map(p => p.symbol));
+    const discrepancies = [];
+    for (const lt of localTrades) {
+      if (!liveSyms.has(lt.symbol)) {
+        // Closed on Binance but DB says 'placed' — mark closed
+        await pool.query("UPDATE broker_trade_log SET status = 'closed_reconciled' WHERE id = $1", [lt.id]);
+        discrepancies.push({ id: lt.id, symbol: lt.symbol, action: 'marked_closed', reason: 'not_in_live' });
+      }
+    }
+
+    res.json({
+      ok: true,
+      livePositions: livePositions.length,
+      localPending: localTrades.length,
+      reconciled: discrepancies.length,
+      discrepancies,
+      balance: account.totalWalletBalance
+    });
+  } catch (err) {
+    console.error('[Broker] reconcile error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1331,7 +1591,7 @@ async function refreshSpx() {
 }
 
 // Public market data endpoint — open CORS (no sensitive info)
-app.get('/api/macro/spx', async (req, res) => {
+app.get('/api/macro/spx', macroLimiter, async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   res.set('Cache-Control', 'public, max-age=900'); // 15min browser cache
   const age = Date.now() - _spxCache.ts;
