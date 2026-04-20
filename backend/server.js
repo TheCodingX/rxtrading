@@ -1357,23 +1357,33 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
     let dailyLoss = parseFloat(cfg.daily_loss_current || 0);
 
     // UTC daily reset (00:00 UTC boundary, not rolling 24h)
-    const resetAt = new Date(cfg.daily_reset_at);
-    const nowUTC = new Date();
-    const todayUTC = Date.UTC(nowUTC.getUTCFullYear(), nowUTC.getUTCMonth(), nowUTC.getUTCDate());
-    const resetAtUTC = Date.UTC(resetAt.getUTCFullYear(), resetAt.getUTCMonth(), resetAt.getUTCDate());
-    if (todayUTC > resetAtUTC) {
-      await pool.query("UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW() AT TIME ZONE 'UTC', consecutive_losses = 0, circuit_breaker_until = NULL WHERE id = $1", [cfg.id]);
-      dailyLoss = 0;
-    }
-
-    // Circuit breaker check — if tripped, reject trade
-    if (cfg.circuit_breaker_until) {
-      const cbUntil = new Date(cfg.circuit_breaker_until).getTime();
-      if (Date.now() < cbUntil) {
-        const remainingMin = Math.ceil((cbUntil - Date.now()) / 60000);
-        return res.status(400).json({ error: `Circuit breaker activo: ${cfg.consecutive_losses || 5} pérdidas consecutivas. Retoma en ${remainingMin}min.` });
+    // Defensive: use try/catch and only update columns that exist
+    try {
+      const resetAt = new Date(cfg.daily_reset_at);
+      const nowUTC = new Date();
+      const todayUTC = Date.UTC(nowUTC.getUTCFullYear(), nowUTC.getUTCMonth(), nowUTC.getUTCDate());
+      const resetAtUTC = Date.UTC(resetAt.getUTCFullYear(), resetAt.getUTCMonth(), resetAt.getUTCDate());
+      if (todayUTC > resetAtUTC) {
+        try {
+          await pool.query("UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW() AT TIME ZONE 'UTC', consecutive_losses = 0, circuit_breaker_until = NULL WHERE id = $1", [cfg.id]);
+        } catch (e) {
+          // Fallback if migration hasn't run yet — only reset daily_loss + daily_reset_at (base columns)
+          await pool.query("UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW() WHERE id = $1", [cfg.id]);
+        }
+        dailyLoss = 0;
       }
-    }
+    } catch (e) { console.warn('[Broker] UTC reset check failed:', e.message); }
+
+    // Circuit breaker check — safe access with optional chaining
+    try {
+      if (cfg.circuit_breaker_until) {
+        const cbUntil = new Date(cfg.circuit_breaker_until).getTime();
+        if (Date.now() < cbUntil) {
+          const remainingMin = Math.ceil((cbUntil - Date.now()) / 60000);
+          return res.status(400).json({ error: `Circuit breaker activo: ${cfg.consecutive_losses || 5} pérdidas consecutivas. Retoma en ${remainingMin}min.` });
+        }
+      }
+    } catch (e) { /* column may not exist yet — skip */ }
 
     if (parseFloat(usdAmount) > maxPos) {
       return res.status(400).json({ error: `Monto excede el límite: $${maxPos} max` });
@@ -1392,22 +1402,26 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
     try {
       const accountSnapshot = await broker.getAccountInfo(apiKey, apiSecret);
       const openPositions = (accountSnapshot.positions || []).filter(p => parseFloat(p.positionAmt) !== 0);
-      const maxConcurrent = parseInt(cfg.max_concurrent_positions || 4);
+      // Defensive: use defaults if columns not present
+      const maxConcurrent = parseInt(cfg.max_concurrent_positions) || 4;
       if (openPositions.length >= maxConcurrent) {
-        return res.status(400).json({ error: `Máximo ${maxConcurrent} posiciones simultáneas. Cerrá una para abrir otra.` });
+        return res.status(400).json({ error: `Máximo ${maxConcurrent} posiciones simultáneas abiertas. Cerrá una para abrir otra.` });
       }
-      // Total deployed notional check: sum of all open positions + this new one
+      // Total deployed notional check
       const currentNotional = openPositions.reduce((sum, p) => sum + Math.abs(parseFloat(p.positionAmt) * parseFloat(p.entryPrice || 0)), 0);
       const newNotional = parseFloat(usdAmount) * parseInt(leverage);
       const totalBalance = parseFloat(accountSnapshot.totalWalletBalance || 0);
-      const maxDeployPct = parseFloat(cfg.max_capital_deployed_pct || 50) / 100;
+      const maxDeployPct = (parseFloat(cfg.max_capital_deployed_pct) || 50) / 100;
       if (totalBalance > 0 && (currentNotional + newNotional) > (totalBalance * maxDeployPct * parseInt(leverage))) {
-        return res.status(400).json({ error: `Exposición total excede ${Math.round(maxDeployPct*100)}% del balance.` });
+        return res.status(400).json({ error: `Exposición total excede ${Math.round(maxDeployPct*100)}% del balance. Actual: $${currentNotional.toFixed(0)}, nuevo: $${newNotional.toFixed(0)}, max: $${(totalBalance*maxDeployPct*parseInt(leverage)).toFixed(0)}` });
       }
     } catch (e) {
-      console.warn('[Broker] Concurrent position check failed:', e.message);
-      // Fail open — don't block on check failure, but log
+      // Fail open — log but don't block trade if check fails
+      console.warn('[Broker] Concurrent position check failed (allowing trade):', e.message);
     }
+
+    // Verbose pre-flight logging (helps debug TP/SL issues in production)
+    console.log(`[Broker] place-order → key=${req.license.keyId} ${side} ${symbol} $${usdAmount} x${leverage} entry=${currentPrice} tp=${tp} sl=${sl}`);
 
     const result = await broker.placeTradeWithTPSL(apiKey, apiSecret, {
       symbol, side, usdAmount: parseFloat(usdAmount),
@@ -1415,21 +1429,30 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
       currentPrice: parseFloat(currentPrice)
     });
 
-    // Log the trade
+    // Detailed post-trade logging
+    const tpOK = !!(result.tp && result.tp.orderId);
+    const slOK = !!(result.sl && result.sl.orderId);
+    const entryOK = !!(result.entry && result.entry.orderId);
+    console.log(`[Broker] place-order result → entry=${entryOK?'✓':'✗'} tp=${tpOK?'✓':'✗'} sl=${slOK?'✓':'✗'}${result.tpError?' TP_ERR:'+result.tpError:''}${result.slError?' SL_ERR:'+result.slError:''}${result.emergencyClosed?' EMERGENCY_CLOSED':''}`);
+
+    // Log the trade with full status breakdown
+    const tradeStatus = (entryOK && tpOK && slOK) ? 'placed' : (entryOK ? 'partial' : 'error');
+    const errMsgAgg = [result.tpError ? 'TP:'+result.tpError : '', result.slError ? 'SL:'+result.slError : '', result.emergencyClosed ? 'EMERGENCY_CLOSE_TRIGGERED' : ''].filter(Boolean).join(' | ');
     await pool.query(`
-      INSERT INTO broker_trade_log (key_id, symbol, side, usd_amount, leverage, entry_price, tp_price, sl_price, binance_order_id, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'placed')
+      INSERT INTO broker_trade_log (key_id, symbol, side, usd_amount, leverage, entry_price, tp_price, sl_price, binance_order_id, status, error_msg)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     `, [
       req.license.keyId, symbol, side, parseFloat(usdAmount), parseInt(leverage),
       parseFloat(currentPrice), parseFloat(tp), parseFloat(sl),
-      String(result.entry.orderId || '')
+      String(result.entry?.orderId || ''), tradeStatus, errMsgAgg
     ]);
 
     await pool.query('UPDATE broker_configs SET last_used = NOW() WHERE id = $1', [cfg.id]);
 
-    res.json({ ok: true, result });
+    // Return with explicit success flags for frontend UX
+    res.json({ ok: true, result, tpPlaced: tpOK, slPlaced: slOK, entryPlaced: entryOK, warning: !tpOK || !slOK ? 'TP o SL no se pudo colocar — chequeá tu posición en Binance manualmente' : null });
   } catch (err) {
-    console.error('[Broker] place-order error:', err);
+    console.error('[Broker] place-order error:', err.message, '— keyId:', req.license?.keyId, 'symbol:', req.body?.symbol);
     // Log the error too
     try {
       await pool.query(`
@@ -1463,6 +1486,72 @@ app.post('/api/broker/listen-key/keepalive', verifyToken, brokerLimiter, async (
     const apiKey = broker.decrypt(rows[0].api_key_enc);
     await broker.keepAliveListenKey(apiKey);
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Pre-flight check — verifies broker config + symbol tradeable + min notional sin ejecutar orden
+app.post('/api/broker/preflight', verifyToken, brokerLimiter, async (req, res) => {
+  const { symbol, usdAmount, leverage, currentPrice } = req.body;
+  if (!symbol || !usdAmount || !leverage || !currentPrice) return res.status(400).json({ error: 'symbol, usdAmount, leverage, currentPrice requeridos' });
+  try {
+    const { rows } = await pool.query('SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1', [req.license.keyId]);
+    if (rows.length === 0) return res.status(400).json({ error: 'Broker no conectado', ok: false });
+    const cfg = rows[0];
+
+    const issues = [];
+
+    // 1. Check limits
+    if (parseFloat(usdAmount) > parseFloat(cfg.max_position_usd)) issues.push(`Monto $${usdAmount} excede max $${cfg.max_position_usd}`);
+    if (parseInt(leverage) > parseInt(cfg.max_leverage)) issues.push(`Leverage ${leverage}x excede max ${cfg.max_leverage}x`);
+
+    // 2. Validate symbol tradeable
+    let symInfo = null;
+    try {
+      symInfo = await broker.getExchangeInfoCached().then(info => info.symbols.find(s => s.symbol === symbol.toUpperCase()));
+      if (!symInfo) issues.push(`Símbolo ${symbol} no existe en Binance ${process.env.BINANCE_TESTNET === 'true' ? 'testnet' : 'mainnet'}`);
+      else if (symInfo.status !== 'TRADING') issues.push(`${symbol} no está TRADING (status: ${symInfo.status})`);
+    } catch (e) { issues.push('No se pudo validar símbolo: ' + e.message); }
+
+    // 3. Check minNotional
+    if (symInfo) {
+      const minNotionalFilter = symInfo.filters.find(f => f.filterType === 'MIN_NOTIONAL');
+      const minNotional = minNotionalFilter ? parseFloat(minNotionalFilter.notional) : 5;
+      const notional = parseFloat(usdAmount) * parseInt(leverage);
+      if (notional < minNotional) issues.push(`Notional $${notional.toFixed(2)} < minNotional $${minNotional} para ${symbol}`);
+    }
+
+    // 4. Check account balance
+    try {
+      const apiKey = broker.decrypt(cfg.api_key_enc);
+      const apiSecret = broker.decrypt(cfg.api_secret_enc);
+      const account = await broker.getAccountInfo(apiKey, apiSecret);
+      const available = parseFloat(account.availableBalance || 0);
+      if (available < parseFloat(usdAmount)) issues.push(`Balance disponible ($${available.toFixed(2)}) < monto solicitado ($${usdAmount})`);
+    } catch (e) { issues.push('No se pudo verificar balance: ' + e.message); }
+
+    res.json({
+      ok: issues.length === 0,
+      issues,
+      mode: process.env.BINANCE_TESTNET === 'true' ? 'testnet' : 'mainnet',
+      symbol,
+      notional: parseFloat(usdAmount) * parseInt(leverage),
+      wouldPlaceOrder: issues.length === 0
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Validate a list of pairs against current Binance exchangeInfo (public endpoint, cached 10min)
+app.post('/api/broker/validate-pairs', macroLimiter, async (req, res) => {
+  try {
+    const { pairs } = req.body || {};
+    if (!Array.isArray(pairs) || pairs.length === 0) return res.status(400).json({ error: 'pairs array required' });
+    if (pairs.length > 50) return res.status(400).json({ error: 'too many pairs (max 50)' });
+    const result = await broker.validatePairs(pairs);
+    res.json({ ok: true, ...result, mode: process.env.BINANCE_TESTNET === 'true' ? 'testnet' : 'mainnet' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1634,16 +1723,33 @@ async function start() {
       console.warn('[Broker] Real trading DISABLED (set BROKER_MASTER_KEY in .env to enable)');
     }
     await initDB();
-    app.listen(PORT, () => {
+    app.listen(PORT, async () => {
+      const mode = process.env.BINANCE_TESTNET === 'true' ? 'TESTNET' : 'MAINNET';
       console.log(`\n  ╔══════════════════════════════════════╗`);
       console.log(`  ║   RX PRO — Backend API v1.1          ║`);
       console.log(`  ║   Puerto: ${PORT}                        ║`);
+      console.log(`  ║   Mode:   ${mode.padEnd(27)} ║`);
       console.log(`  ║   CORS:   ${CORS_ORIGINS.join(', ').slice(0,25).padEnd(25)} ║`);
       console.log(`  ║   Stripe: ${stripe ? 'Configured' : 'Not configured'}             ║`);
       console.log(`  ║   MP:     ${MP_ACCESS_TOKEN ? 'Configured' : 'Not configured'}             ║`);
       console.log(`  ║   USDT:   ${NOWPAYMENTS_API_KEY ? 'NOWPayments OK' : 'Manual only'}          ║`);
       console.log(`  ║   Broker: ${brokerOk ? 'Binance Futures ON' : 'DISABLED'}         ║`);
       console.log(`  ╚══════════════════════════════════════╝\n`);
+
+      // Validate APEX v42 PRO+ pair universe against live Binance exchangeInfo
+      if (brokerOk) {
+        try {
+          const universe = (process.env.APEX_PAIRS || 'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,ADAUSDT,AVAXUSDT,DOGEUSDT,LINKUSDT,LTCUSDT,DOTUSDT,1000PEPEUSDT,POLUSDT,RENDERUSDT,ARBUSDT').split(',').map(s => s.trim());
+          const validation = await broker.validatePairs(universe);
+          if (validation.invalid && validation.invalid.length) {
+            console.warn(`[Startup] ⚠ ${validation.invalid.length} pairs NOT tradeable on ${mode}: ${validation.invalid.join(', ')}`);
+          } else {
+            console.log(`[Startup] ✓ All ${validation.valid.length} APEX pairs validated on ${mode} (${validation.totalTradeable} total tradeable)`);
+          }
+        } catch (e) {
+          console.warn('[Startup] Pair validation failed:', e.message);
+        }
+      }
     });
   } catch (err) {
     console.error('Failed to start server:', err);

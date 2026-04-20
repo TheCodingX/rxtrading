@@ -148,11 +148,40 @@ async function setLeverage(apiKey, apiSecret, symbol, leverage) {
   }, apiKey, apiSecret, true);
 }
 
-async function getSymbolInfo(symbol) {
-  // Public endpoint — no auth needed
+// Cache exchangeInfo for 10 min to avoid hammering Binance
+let _exchangeInfoCache = null;
+let _exchangeInfoCacheAt = 0;
+async function getExchangeInfoCached() {
+  const now = Date.now();
+  if (_exchangeInfoCache && (now - _exchangeInfoCacheAt) < 10 * 60 * 1000) return _exchangeInfoCache;
   const info = await binanceRequest('GET', '/fapi/v1/exchangeInfo', {}, 'public', 'public', false);
+  _exchangeInfoCache = info;
+  _exchangeInfoCacheAt = now;
+  return info;
+}
+
+// Validate that a set of symbols is actually tradeable on Binance mainnet/testnet
+async function validatePairs(symbols) {
+  try {
+    const info = await getExchangeInfoCached();
+    const tradeable = new Set(info.symbols.filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL').map(s => s.symbol));
+    const valid = [];
+    const invalid = [];
+    for (const sym of symbols) {
+      if (tradeable.has(sym.toUpperCase())) valid.push(sym);
+      else invalid.push(sym);
+    }
+    return { valid, invalid, totalTradeable: tradeable.size };
+  } catch (e) {
+    return { valid: symbols, invalid: [], error: e.message };
+  }
+}
+
+async function getSymbolInfo(symbol) {
+  const info = await getExchangeInfoCached();
   const sym = info.symbols.find(s => s.symbol === symbol.toUpperCase());
-  if (!sym) throw new Error('Symbol not found: ' + symbol);
+  if (!sym) throw new Error('Symbol not found or not tradeable on current Binance host: ' + symbol);
+  if (sym.status !== 'TRADING') throw new Error(`Symbol ${symbol} is not in TRADING state (status: ${sym.status})`);
   const lotFilter = sym.filters.find(f => f.filterType === 'LOT_SIZE');
   const priceFilter = sym.filters.find(f => f.filterType === 'PRICE_FILTER');
   const minNotionalFilter = sym.filters.find(f => f.filterType === 'MIN_NOTIONAL');
@@ -418,6 +447,8 @@ module.exports = {
   decrypt,
   testConnection,
   getAccountInfo,
+  getExchangeInfoCached,
+  validatePairs,
   setLeverage,
   placeTradeWithTPSL,
   cancelAllOrders,

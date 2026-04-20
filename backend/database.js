@@ -120,6 +120,36 @@ async function initDB() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_broker_key ON broker_configs(key_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_broker_log_key ON broker_trade_log(key_id)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_broker_log_created ON broker_trade_log(created_at)`);
+
+  // ══ MIGRATIONS — idempotent column additions for v42 safety features ══
+  // These ALTER TABLE ADD COLUMN IF NOT EXISTS statements run on every boot and are no-ops if columns exist
+  const migrations = [
+    // Circuit breaker tracking
+    `ALTER TABLE broker_configs ADD COLUMN IF NOT EXISTS consecutive_losses INTEGER DEFAULT 0`,
+    `ALTER TABLE broker_configs ADD COLUMN IF NOT EXISTS circuit_breaker_until TIMESTAMPTZ DEFAULT NULL`,
+    // Concurrent position + capital deployment limits
+    `ALTER TABLE broker_configs ADD COLUMN IF NOT EXISTS max_concurrent_positions INTEGER DEFAULT 4`,
+    `ALTER TABLE broker_configs ADD COLUMN IF NOT EXISTS max_capital_deployed_pct NUMERIC(5,2) DEFAULT 50`,
+    // Session token for payment verification
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS session_token TEXT DEFAULT NULL`,
+    // Soft-delete support
+    `ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS is_deleted INTEGER DEFAULT 0`,
+    // Audit timestamps
+    `ALTER TABLE broker_configs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
+    // Indices para performance
+    `CREATE INDEX IF NOT EXISTS idx_license_keys_key_code ON license_keys(key_code)`,
+    `CREATE INDEX IF NOT EXISTS idx_payments_payment_id ON payments(payment_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)`,
+    `CREATE INDEX IF NOT EXISTS idx_activations_key_id ON activations(key_id)`
+  ];
+  for (const sql of migrations) {
+    try {
+      await pool.query(sql);
+    } catch (err) {
+      console.warn('[Migration] Skipped (may be unsupported feature):', err.message.slice(0, 100));
+    }
+  }
+  console.log('[DB] Migrations applied (safety columns + indices)');
 }
 
 module.exports = { pool, initDB };
