@@ -201,6 +201,19 @@ const macroLimiter = rateLimit({
   message: { error: 'Rate limit en macro data. Intenta en 1 minuto.' }
 });
 
+// Per-user rate limiter helper: uses keyId for authenticated endpoints, falls back to IP
+function perUserKey(req) {
+  return req.license?.keyId ? `user_${req.license.keyId}` : req.ip;
+}
+const perUserSyncLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyGenerator: perUserKey,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiadas sync requests — intenta en 1 minuto.' }
+});
+
 app.use('/api/', generalLimiter);
 
 // ════════════════════════════════════════════════════
@@ -341,9 +354,9 @@ app.post('/api/keys/validate', validateLimiter, async (req, res) => {
         res.cookie('rx_refresh', refreshToken, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
-          sameSite: 'strict',
+          sameSite: 'lax', // Allows top-level navigation (email/Discord links) but blocks cross-site POST
           maxAge: 90 * 24 * 60 * 60 * 1000,
-          path: '/api/keys/refresh'
+          path: '/' // Available on all endpoints (previously too restrictive)
         });
       } catch(e){}
 
@@ -462,7 +475,7 @@ app.post('/api/keys/logout', verifyToken, async (req, res) => {
       [keyId, fp]
     );
     // Clear refresh cookie
-    try { res.clearCookie('rx_refresh', { path: '/api/keys/refresh' }); } catch(e){}
+    try { res.clearCookie('rx_refresh', { path: '/' }); } catch(e){}
     res.json({ success: true, message: 'Sesión VIP cerrada.' });
   } catch (err) {
     console.error('Error logging out:', err);
@@ -535,13 +548,20 @@ app.post('/api/payments/stripe/checkout', paymentLimiter, async (req, res) => {
     return res.status(503).json({ error: 'Stripe no está configurado.' });
   }
 
+  // Email format validation (RFC-compatible basic check)
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
+    return res.status(400).json({ error: 'Email inválido.' });
+  }
+
   const plan = PLANS[planId];
   const paymentId = `pay_${crypto.randomUUID()}`;
+  // Generate session_token to prevent key_code enumeration on status endpoint
+  const sessionToken = crypto.randomBytes(32).toString('hex');
 
   try {
     await pool.query(
-      'INSERT INTO payments (payment_id, provider, plan_id, amount_usd, email, status) VALUES ($1, $2, $3, $4, $5, $6)',
-      [paymentId, 'stripe', planId, plan.usd, email || '', 'pending']
+      'INSERT INTO payments (payment_id, provider, plan_id, amount_usd, email, status, session_token) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [paymentId, 'stripe', planId, plan.usd, email || '', 'pending', sessionToken]
     );
 
     const sessionParams = {
@@ -554,7 +574,7 @@ app.post('/api/payments/stripe/checkout', paymentLimiter, async (req, res) => {
         },
         quantity: 1,
       }],
-      success_url: `${FRONTEND_URL}/app.html?payment=success&session_id={CHECKOUT_SESSION_ID}#vip`,
+      success_url: `${FRONTEND_URL}/app.html?payment=success&session_id={CHECKOUT_SESSION_ID}&st=${sessionToken}#vip`,
       cancel_url: `${FRONTEND_URL}/app.html#vip`,
       metadata: {
         payment_id: paymentId,
@@ -568,7 +588,7 @@ app.post('/api/payments/stripe/checkout', paymentLimiter, async (req, res) => {
 
     const session = await stripe.checkout.sessions.create(sessionParams);
 
-    res.json({ url: session.url, paymentId });
+    res.json({ url: session.url, paymentId, sessionToken });
   } catch (err) {
     console.error('Error creating Stripe checkout:', err);
     res.status(500).json({ error: 'Error al crear sesión de pago.' });
@@ -587,13 +607,18 @@ app.post('/api/payments/mercadopago/checkout', paymentLimiter, async (req, res) 
     return res.status(503).json({ error: 'MercadoPago no está configurado.' });
   }
 
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
+    return res.status(400).json({ error: 'Email inválido.' });
+  }
+
   const plan = PLANS[planId];
   const paymentId = `pay_${crypto.randomUUID()}`;
+  const sessionToken = crypto.randomBytes(32).toString('hex');
 
   try {
     await pool.query(
-      'INSERT INTO payments (payment_id, provider, plan_id, amount_usd, email, status) VALUES ($1, $2, $3, $4, $5, $6)',
-      [paymentId, 'mercadopago', planId, plan.usd, email || '', 'pending']
+      'INSERT INTO payments (payment_id, provider, plan_id, amount_usd, email, status, session_token) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [paymentId, 'mercadopago', planId, plan.usd, email || '', 'pending', sessionToken]
     );
 
     const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
@@ -787,13 +812,18 @@ app.post('/api/payments/usdt/create', paymentLimiter, async (req, res) => {
     return res.status(503).json({ error: 'Crypto payments not configured.' });
   }
 
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim())) {
+    return res.status(400).json({ error: 'Email inválido.' });
+  }
+
   const plan = PLANS[planId];
   const paymentId = `pay_${crypto.randomUUID()}`;
+  const sessionToken = crypto.randomBytes(32).toString('hex');
 
   try {
     await pool.query(
-      'INSERT INTO payments (payment_id, provider, plan_id, amount_usd, email, status) VALUES ($1, $2, $3, $4, $5, $6)',
-      [paymentId, 'usdt', planId, plan.usd, email || '', 'pending']
+      'INSERT INTO payments (payment_id, provider, plan_id, amount_usd, email, status, session_token) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      [paymentId, 'usdt', planId, plan.usd, email || '', 'pending', sessionToken]
     );
 
     // Create payment via NOWPayments API
@@ -1104,22 +1134,29 @@ app.get('/api/user/paper', syncLimiter, verifyToken, async (req, res) => {
   }
 });
 
-// POST /api/user/paper — Save paper trading data to cloud
+// POST /api/user/paper — Save paper trading data to cloud (with optimistic concurrency versioning)
 app.post('/api/user/paper', syncLimiter, verifyToken, async (req, res) => {
   const { keyId } = req.license;
-  const { data } = req.body;
+  const { data, _syncVersion, _clientVersion } = req.body;
 
   if (!data || typeof data !== 'object') {
     return res.status(400).json({ error: 'Data inválida.' });
   }
+  const clientVer = Number(_clientVersion || _syncVersion || Date.now());
 
   try {
-    await pool.query(`
+    // Optimistic concurrency: only update if client version >= server updated_at
+    const result = await pool.query(`
       INSERT INTO user_paper_data (key_id, data, updated_at)
-      VALUES ($1, $2, NOW())
+      VALUES ($1, $2, to_timestamp($3 / 1000.0))
       ON CONFLICT (key_id)
-      DO UPDATE SET data = $2, updated_at = NOW()
-    `, [keyId, JSON.stringify(data)]);
+      DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at
+      WHERE user_paper_data.updated_at <= EXCLUDED.updated_at
+      RETURNING updated_at
+    `, [keyId, JSON.stringify(data), clientVer]);
+    if (result.rowCount === 0) {
+      return res.status(409).json({ error: 'Conflict: server has newer version', staleClient: true });
+    }
 
     res.json({ success: true });
   } catch (err) {
@@ -1149,26 +1186,29 @@ app.get('/api/user/signals', syncLimiter, verifyToken, async (req, res) => {
   }
 });
 
-// POST /api/user/signals — Save signal history to cloud
+// POST /api/user/signals — Save signal history to cloud (optimistic concurrency)
 app.post('/api/user/signals', syncLimiter, verifyToken, async (req, res) => {
   const { keyId } = req.license;
-  const { data } = req.body;
+  const { data, _syncVersion, _clientVersion } = req.body;
 
   if (!Array.isArray(data)) {
     return res.status(400).json({ error: 'Data debe ser un array.' });
   }
-
-  // Limit to last 500 signals to avoid bloat
+  const clientVer = Number(_clientVersion || _syncVersion || Date.now());
   const trimmed = data.slice(-500);
 
   try {
-    await pool.query(`
+    const result = await pool.query(`
       INSERT INTO user_signal_history (key_id, data, updated_at)
-      VALUES ($1, $2, NOW())
+      VALUES ($1, $2, to_timestamp($3 / 1000.0))
       ON CONFLICT (key_id)
-      DO UPDATE SET data = $2, updated_at = NOW()
-    `, [keyId, JSON.stringify(trimmed)]);
-
+      DO UPDATE SET data = EXCLUDED.data, updated_at = EXCLUDED.updated_at
+      WHERE user_signal_history.updated_at <= EXCLUDED.updated_at
+      RETURNING updated_at
+    `, [keyId, JSON.stringify(trimmed), clientVer]);
+    if (result.rowCount === 0) {
+      return res.status(409).json({ error: 'Conflict: server has newer version', staleClient: true });
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('[Sync] Error saving signal history:', err);
@@ -1186,6 +1226,8 @@ app.post('/api/user/delete-all', syncLimiter, verifyToken, async (req, res) => {
   try {
     await pool.query('BEGIN');
     await pool.query('DELETE FROM user_data WHERE key_id = $1', [keyId]).catch(()=>{});
+    await pool.query('DELETE FROM user_paper_data WHERE key_id = $1', [keyId]).catch(()=>{});
+    await pool.query('DELETE FROM user_signal_history WHERE key_id = $1', [keyId]).catch(()=>{});
     await pool.query('DELETE FROM activations WHERE key_id = $1', [keyId]).catch(()=>{});
     await pool.query('DELETE FROM broker_trade_log WHERE key_id = $1', [keyId]).catch(()=>{});
     await pool.query('DELETE FROM broker_configs WHERE key_id = $1', [keyId]).catch(()=>{});
@@ -1400,6 +1442,9 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
     const apiSecret = broker.decrypt(cfg.api_secret_enc);
 
     try {
+      // TOCTOU mitigation: acquire advisory lock on key_id for duration of concurrent check + place order
+      // This serializes trade placement per user so two simultaneous requests can't both pass the check
+      await pool.query('SELECT pg_advisory_xact_lock($1)', [cfg.id]).catch(()=>{});
       const accountSnapshot = await broker.getAccountInfo(apiKey, apiSecret);
       const openPositions = (accountSnapshot.positions || []).filter(p => parseFloat(p.positionAmt) !== 0);
       // Defensive: use defaults if columns not present
@@ -1460,6 +1505,37 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
         VALUES ($1, $2, $3, $4, $5, 'error', $6)
       `, [req.license.keyId, req.body.symbol, req.body.side, req.body.usdAmount, req.body.leverage, err.message]);
     } catch (e) {}
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/broker/trade-result — client reports trade outcome (win/loss) to update circuit breaker
+app.post('/api/broker/trade-result', verifyToken, brokerLimiter, async (req, res) => {
+  const { result, pnl, symbol } = req.body; // result: 'win' | 'loss'
+  if (!['win', 'loss'].includes(result)) return res.status(400).json({ error: 'result must be win|loss' });
+  try {
+    const { rows } = await pool.query('SELECT id, consecutive_losses, daily_loss_current, daily_loss_limit_usd FROM broker_configs WHERE key_id = $1 AND is_active = 1', [req.license.keyId]);
+    if (rows.length === 0) return res.status(400).json({ error: 'Broker no conectado' });
+    const cfg = rows[0];
+
+    if (result === 'loss') {
+      const newLosses = (parseInt(cfg.consecutive_losses) || 0) + 1;
+      const newDailyLoss = (parseFloat(cfg.daily_loss_current) || 0) + Math.abs(parseFloat(pnl) || 0);
+      // Trip circuit breaker if 5+ consecutive losses
+      const tripCB = newLosses >= 5;
+      const cbUntilSQL = tripCB ? `NOW() + INTERVAL '6 hours'` : 'circuit_breaker_until';
+      await pool.query(
+        `UPDATE broker_configs SET consecutive_losses = $1, daily_loss_current = $2, circuit_breaker_until = CASE WHEN $3 THEN NOW() + INTERVAL '6 hours' ELSE circuit_breaker_until END, updated_at = NOW() WHERE id = $4`,
+        [newLosses, newDailyLoss, tripCB, cfg.id]
+      );
+      res.json({ ok: true, consecutive_losses: newLosses, circuit_breaker_tripped: tripCB });
+    } else {
+      // Win resets consecutive losses
+      await pool.query('UPDATE broker_configs SET consecutive_losses = 0, updated_at = NOW() WHERE id = $1', [cfg.id]);
+      res.json({ ok: true, consecutive_losses: 0 });
+    }
+  } catch (err) {
+    console.error('[Broker] trade-result error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1720,7 +1796,11 @@ async function start() {
     // Initialize broker encryption key
     brokerOk = broker.initMasterKey();
     if (!brokerOk) {
-      console.warn('[Broker] Real trading DISABLED (set BROKER_MASTER_KEY in .env to enable)');
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[FATAL] BROKER_MASTER_KEY missing in production — refusing to start without encryption');
+        process.exit(1);
+      }
+      console.warn('[Broker] Real trading DISABLED in DEV mode (set BROKER_MASTER_KEY to enable)');
     }
     await initDB();
     app.listen(PORT, async () => {

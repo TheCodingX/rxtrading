@@ -61,7 +61,7 @@ function signQuery(params, secret) {
   return query + '&signature=' + signature;
 }
 
-function binanceRequest(method, path, params, apiKey, apiSecret, isSigned = true) {
+function _binanceRequestOnce(method, path, params, apiKey, apiSecret, isSigned = true) {
   return new Promise((resolve, reject) => {
     let query = '';
     if (isSigned) {
@@ -91,20 +91,46 @@ function binanceRequest(method, path, params, apiKey, apiSecret, isSigned = true
         try {
           const parsed = JSON.parse(data);
           if (res.statusCode >= 400) {
-            reject(new Error(parsed.msg || `Binance error ${res.statusCode}`));
+            const err = new Error(parsed.msg || `Binance error ${res.statusCode}`);
+            err.statusCode = res.statusCode;
+            err.binanceCode = parsed.code;
+            reject(err);
           } else {
             resolve(parsed);
           }
         } catch (e) {
-          reject(new Error('Binance response parse error: ' + data.substring(0, 200)));
+          const err = new Error('Binance response parse error: ' + data.substring(0, 200));
+          err.statusCode = res.statusCode;
+          reject(err);
         }
       });
     });
 
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('Binance request timeout')); });
+    req.on('error', (e) => { e.isNetworkError = true; reject(e); });
+    req.on('timeout', () => { req.destroy(); const e = new Error('Binance request timeout'); e.isTimeout = true; reject(e); });
     req.end();
   });
+}
+
+// Wrapper with exponential backoff retry for transient errors (429, 503, timeouts)
+async function binanceRequest(method, path, params, apiKey, apiSecret, isSigned = true, maxRetries = 3) {
+  let lastErr = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await _binanceRequestOnce(method, path, params, apiKey, apiSecret, isSigned);
+    } catch (err) {
+      lastErr = err;
+      const isTransient = err.statusCode === 429 || err.statusCode === 418 || err.statusCode === 503 || err.isTimeout || err.isNetworkError;
+      // 4xx client errors (except 429/418) should fail fast
+      if (!isTransient) throw err;
+      if (attempt === maxRetries - 1) break;
+      // Exponential backoff: 500ms, 1.5s, 4s
+      const delay = Math.min(4000, 500 * Math.pow(3, attempt));
+      console.warn(`[Binance] Transient error (${err.statusCode || err.message}), retry ${attempt+1}/${maxRetries} in ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
 }
 
 // ═══ HIGH-LEVEL API FUNCTIONS ═══
@@ -241,6 +267,20 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   if (symbolInfo.minNotional && notionalValue < symbolInfo.minNotional) {
     throw new Error(`Notional too small for ${symbol}. Minimum: $${symbolInfo.minNotional} (got $${notionalValue.toFixed(2)})`);
   }
+  // CRITICAL: Validate TP/SL direction vs side to prevent Binance rejection
+  //   BUY:  entry ~currentPrice, TP > entry, SL < entry
+  //   SELL: entry ~currentPrice, TP < entry, SL > entry
+  if (side === 'BUY') {
+    if (tp <= currentPrice) throw new Error(`Invalid TP for BUY: TP ($${tp}) must be above current price ($${currentPrice})`);
+    if (sl >= currentPrice) throw new Error(`Invalid SL for BUY: SL ($${sl}) must be below current price ($${currentPrice})`);
+  } else { // SELL
+    if (tp >= currentPrice) throw new Error(`Invalid TP for SELL: TP ($${tp}) must be below current price ($${currentPrice})`);
+    if (sl <= currentPrice) throw new Error(`Invalid SL for SELL: SL ($${sl}) must be above current price ($${currentPrice})`);
+  }
+  // Sanity check: reasonable SL distance (prevent SL too close = instant stop, or too far = huge loss)
+  const slPct = Math.abs(sl - currentPrice) / currentPrice;
+  if (slPct > 0.25) throw new Error(`SL distance too large (${(slPct*100).toFixed(1)}% > 25% cap)`);
+  if (slPct < 0.001) throw new Error(`SL distance too small (${(slPct*100).toFixed(3)}% < 0.1% min)`);
 
   const closeSide = side === 'BUY' ? 'SELL' : 'BUY';
 
@@ -351,18 +391,31 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
       result.slError = e2.message;
       console.error(`[Broker] SL failed for ${symbol}:`, e.message, '| Fallback:', e2.message);
       // CRITICAL: SL failed — cancel all orders + close position to avoid unprotected exposure
-      try {
-        await binanceRequest('DELETE', '/fapi/v1/allOpenOrders', { symbol: symbol.toUpperCase() }, apiKey, apiSecret, true);
-        await binanceRequest('POST', '/fapi/v1/order', {
-          symbol: symbol.toUpperCase(),
-          side: closeSide,
-          type: 'MARKET',
-          quantity,
-          reduceOnly: 'true'
-        }, apiKey, apiSecret, true);
-        result.emergencyClosed = true;
-      } catch (e3) {
-        result.emergencyCloseError = e3.message;
+      // With retry logic: try cancel + market close up to 3 times each
+      let emergencyAttempts = 0;
+      const emergencyErrors = [];
+      while (emergencyAttempts < 3 && !result.emergencyClosed) {
+        emergencyAttempts++;
+        try {
+          await binanceRequest('DELETE', '/fapi/v1/allOpenOrders', { symbol: symbol.toUpperCase() }, apiKey, apiSecret, true, 2);
+          await binanceRequest('POST', '/fapi/v1/order', {
+            symbol: symbol.toUpperCase(),
+            side: closeSide,
+            type: 'MARKET',
+            quantity,
+            reduceOnly: 'true'
+          }, apiKey, apiSecret, true, 2);
+          result.emergencyClosed = true;
+          result.emergencyCloseAttempts = emergencyAttempts;
+          console.warn(`[Broker] EMERGENCY close succeeded on attempt ${emergencyAttempts} for ${symbol}`);
+        } catch (e3) {
+          emergencyErrors.push(e3.message);
+          if (emergencyAttempts < 3) await new Promise(r => setTimeout(r, 1000 * emergencyAttempts));
+        }
+      }
+      if (!result.emergencyClosed) {
+        result.emergencyCloseError = emergencyErrors.join(' | ');
+        console.error(`[Broker] CRITICAL: emergency close FAILED for ${symbol} after 3 attempts:`, emergencyErrors);
       }
     }
   }
