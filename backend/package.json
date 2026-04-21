@@ -5,7 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "test": "node --test __tests__/",
+    "test:smoke": "node --test __tests__/smoke.test.js",
+    "audit": "npm audit --audit-level=moderate",
+    "lint:check": "node --check server.js && node --check broker.js && node --check database.js"
   },
   "engines": {
     "node": ">=18.0.0"

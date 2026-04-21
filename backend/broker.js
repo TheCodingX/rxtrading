@@ -246,8 +246,23 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
 
   const symbolInfo = await getSymbolInfo(symbol);
 
-  // Set leverage first (non-fatal if already set)
-  try { await setLeverage(apiKey, apiSecret, symbol, leverage); } catch (e) {}
+  // Set leverage — BLOCKING: fail trade if can't set (prevents 5x under-exposure)
+  try {
+    await setLeverage(apiKey, apiSecret, symbol, leverage);
+  } catch (e) {
+    // Binance returns code -4046 if leverage is already set to that value (OK)
+    if (e.binanceCode !== -4046 && !String(e.message || '').includes('No need to change leverage')) {
+      throw new Error(`Cannot set leverage ${leverage}x on ${symbol}: ${e.message}. Trade aborted for safety.`);
+    }
+  }
+
+  // Detect position mode (One-Way vs Hedge) for correct positionSide param
+  let positionMode = 'one-way';
+  try {
+    const account = await binanceRequest('GET', '/fapi/v2/account', {}, apiKey, apiSecret, true, 2);
+    if (account.dualSidePosition === true) positionMode = 'hedge';
+  } catch(e) { /* default to one-way if check fails */ }
+  const positionSide = positionMode === 'hedge' ? (side === 'BUY' ? 'LONG' : 'SHORT') : undefined;
 
   // Calculate quantity: usdAmount * leverage / price
   const notional = usdAmount * leverage;
@@ -285,15 +300,41 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   const closeSide = side === 'BUY' ? 'SELL' : 'BUY';
 
   // 1. Entry market order FIRST — get the ACTUAL fill price
-  const entryOrder = await binanceRequest('POST', '/fapi/v1/order', {
+  const entryParams = {
     symbol: symbol.toUpperCase(),
     side,
     type: 'MARKET',
-    quantity
-  }, apiKey, apiSecret, true);
+    quantity,
+    ...(positionSide && { positionSide })
+  };
+  const entryOrder = await binanceRequest('POST', '/fapi/v1/order', entryParams, apiKey, apiSecret, true);
 
-  // Get actual fill price from the entry order
-  const actualEntry = parseFloat(entryOrder.avgPrice) || currentPrice;
+  // Validate entry order filled correctly before placing TP/SL
+  if (entryOrder.status && !['FILLED', 'NEW'].includes(entryOrder.status)) {
+    throw new Error(`Entry order not filled properly: status=${entryOrder.status}. Refusing to place TP/SL.`);
+  }
+  // Get actual fill price — prefer avgPrice, fallback to price from executedQty calc, finally currentPrice
+  let actualEntry = parseFloat(entryOrder.avgPrice);
+  if (!actualEntry && entryOrder.executedQty && entryOrder.cumQuote) {
+    actualEntry = parseFloat(entryOrder.cumQuote) / parseFloat(entryOrder.executedQty);
+  }
+  if (!actualEntry) actualEntry = currentPrice;
+  // Sanity: if slippage >5% between signal and actual, abort (market likely illiquid or dumped)
+  const slippagePct = Math.abs(actualEntry - currentPrice) / currentPrice;
+  if (slippagePct > 0.05) {
+    // Emergency close the position
+    try {
+      await binanceRequest('POST', '/fapi/v1/order', {
+        symbol: symbol.toUpperCase(),
+        side: closeSide,
+        type: 'MARKET',
+        quantity,
+        reduceOnly: 'true',
+        ...(positionSide && { positionSide })
+      }, apiKey, apiSecret, true, 2);
+    } catch(e) {}
+    throw new Error(`Excessive slippage ${(slippagePct*100).toFixed(2)}% — position closed for safety`);
+  }
 
   // ═══ CRITICAL FIX: Recalculate TP/SL relative to ACTUAL entry price ═══
   // This preserves the R:R regardless of entry delay/slippage
@@ -313,7 +354,26 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   const tpPrice = roundToTick(adjustedTP, symbolInfo.tickSize);
   const slPrice = roundToTick(adjustedSL, symbolInfo.tickSize);
 
-  console.log(`[Broker] ${symbol} ${side}: signal@${currentPrice} → actual@${actualEntry} | TP: ${tp}→${tpPrice} | SL: ${sl}→${slPrice} | R:R preserved`);
+  // Validate against PRICE_FILTER (Binance rejects prices outside minPrice/maxPrice range)
+  const info = await getExchangeInfoCached();
+  const symObj = info.symbols.find(s => s.symbol === symbol.toUpperCase());
+  const priceFilter = symObj && symObj.filters.find(f => f.filterType === 'PRICE_FILTER');
+  if (priceFilter) {
+    const minP = parseFloat(priceFilter.minPrice);
+    const maxP = parseFloat(priceFilter.maxPrice);
+    if (minP > 0 && (tpPrice < minP || tpPrice > maxP || slPrice < minP || slPrice > maxP)) {
+      // Emergency close entry if TP/SL out of range
+      try {
+        await binanceRequest('POST', '/fapi/v1/order', {
+          symbol: symbol.toUpperCase(), side: closeSide, type: 'MARKET', quantity, reduceOnly: 'true',
+          ...(positionSide && { positionSide })
+        }, apiKey, apiSecret, true, 2);
+      } catch(e){}
+      throw new Error(`TP/SL price out of PRICE_FILTER range [${minP}, ${maxP}] — position closed for safety`);
+    }
+  }
+
+  console.log(`[Broker] ${symbol} ${side}${positionMode==='hedge'?' ['+positionSide+']':''}: signal@${currentPrice} → actual@${actualEntry} | TP: ${tp}→${tpPrice} | SL: ${sl}→${slPrice} | R:R preserved`);
 
   const result = {
     entry: entryOrder,
@@ -339,7 +399,8 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
       quantity,
       reduceOnly: 'true',
       workingType: 'CONTRACT_PRICE',
-      priceProtect: 'true'
+      priceProtect: 'true',
+      ...(positionSide && { positionSide })
     }, apiKey, apiSecret, true);
   } catch (e) {
     // Fallback: TAKE_PROFIT limit order with explicit quantity
@@ -353,7 +414,8 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
         quantity,
         reduceOnly: 'true',
         timeInForce: 'GTC',
-        workingType: 'CONTRACT_PRICE'
+        workingType: 'CONTRACT_PRICE',
+        ...(positionSide && { positionSide })
       }, apiKey, apiSecret, true);
     } catch (e2) {
       result.tpError = e2.message;
@@ -371,7 +433,8 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
       quantity,
       reduceOnly: 'true',
       workingType: 'CONTRACT_PRICE',
-      priceProtect: 'true'
+      priceProtect: 'true',
+      ...(positionSide && { positionSide })
     }, apiKey, apiSecret, true);
   } catch (e) {
     // Fallback: STOP limit order with explicit quantity
@@ -385,7 +448,8 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
         quantity,
         reduceOnly: 'true',
         timeInForce: 'GTC',
-        workingType: 'CONTRACT_PRICE'
+        workingType: 'CONTRACT_PRICE',
+        ...(positionSide && { positionSide })
       }, apiKey, apiSecret, true);
     } catch (e2) {
       result.slError = e2.message;
@@ -471,7 +535,21 @@ async function closeAllPositions(apiKey, apiSecret) {
 }
 
 // listenKey management for userDataStream (real-time balance/position/order push)
+async function revokeListenKey(apiKey) {
+  const BINANCE_HOST = process.env.BINANCE_TESTNET === 'true' ? 'testnet.binancefuture.com' : 'fapi.binance.com';
+  const https = require('https');
+  return new Promise((resolve) => {
+    const req = https.request({ host: BINANCE_HOST, path: '/fapi/v1/listenKey', method: 'DELETE', headers: { 'X-MBX-APIKEY': apiKey } }, (res) => {
+      res.on('data', () => {});
+      res.on('end', () => resolve(true));
+    });
+    req.on('error', () => resolve(false));
+    req.end();
+  });
+}
 async function createListenKey(apiKey) {
+  // Revoke any existing listenKey first (prevents accumulating keys in Binance)
+  try { await revokeListenKey(apiKey); } catch(e) { /* best-effort */ }
   const BINANCE_HOST = process.env.BINANCE_TESTNET === 'true' ? 'testnet.binancefuture.com' : 'fapi.binance.com';
   const https = require('https');
   return new Promise((resolve, reject) => {
@@ -486,11 +564,16 @@ async function keepAliveListenKey(apiKey) {
   const BINANCE_HOST = process.env.BINANCE_TESTNET === 'true' ? 'testnet.binancefuture.com' : 'fapi.binance.com';
   const https = require('https');
   return new Promise((resolve, reject) => {
-    const req = https.request({ host: BINANCE_HOST, path: '/fapi/v1/listenKey', method: 'PUT', headers: { 'X-MBX-APIKEY': apiKey } }, (res) => {
+    const req = https.request({ host: BINANCE_HOST, path: '/fapi/v1/listenKey', method: 'PUT', headers: { 'X-MBX-APIKEY': apiKey }, timeout: 10000 }, (res) => {
       let data = ''; res.on('data', (c) => data += c);
-      res.on('end', () => resolve(true));
+      res.on('end', () => {
+        if (res.statusCode >= 400) reject(new Error(`keepAlive HTTP ${res.statusCode}`));
+        else resolve(true);
+      });
     });
-    req.on('error', reject); req.end();
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('keepAlive timeout')); });
+    req.end();
   });
 }
 
@@ -508,5 +591,6 @@ module.exports = {
   closePosition,
   closeAllPositions,
   createListenKey,
-  keepAliveListenKey
+  keepAliveListenKey,
+  revokeListenKey
 };

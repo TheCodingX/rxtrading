@@ -1,9 +1,21 @@
 const { Pool } = require('pg');
 
+// SSL: use Render/Heroku CA (rejectUnauthorized:true if proper cert chain available)
+// Override via DB_SSL_STRICT=true in env if managed DB has valid cert
+const sslConfig = process.env.NODE_ENV === 'production'
+  ? { rejectUnauthorized: process.env.DB_SSL_STRICT === 'true' }
+  : false;
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: sslConfig,
+  max: parseInt(process.env.DB_POOL_MAX || '10'),
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+  statement_timeout: 30000, // 30s query timeout (prevents hanging queries)
+  query_timeout: 30000
 });
+// Global error handler (prevent crash on idle client errors)
+pool.on('error', (err) => { console.error('[DB Pool] Unexpected error:', err.message); });
 
 async function initDB() {
   await pool.query(`
@@ -136,6 +148,18 @@ async function initDB() {
     `ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS is_deleted INTEGER DEFAULT 0`,
     // Audit timestamps
     `ALTER TABLE broker_configs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`,
+    // Refresh token rotation support
+    `ALTER TABLE activations ADD COLUMN IF NOT EXISTS refresh_token_version INTEGER DEFAULT 1`,
+    // Index for refresh token version lookups
+    `CREATE INDEX IF NOT EXISTS idx_activations_fp_ver ON activations(fingerprint, refresh_token_version DESC)`,
+    // Recovery tokens for account recovery via email
+    `CREATE TABLE IF NOT EXISTS recovery_tokens (id SERIAL PRIMARY KEY, email TEXT NOT NULL, token TEXT UNIQUE NOT NULL, used INTEGER DEFAULT 0, created_at TIMESTAMPTZ DEFAULT NOW(), expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '1 hour')`,
+    `CREATE INDEX IF NOT EXISTS idx_recovery_token ON recovery_tokens(token)`,
+    `CREATE INDEX IF NOT EXISTS idx_recovery_email ON recovery_tokens(email)`,
+    // Audit log immutable table
+    `CREATE TABLE IF NOT EXISTS audit_log (id SERIAL PRIMARY KEY, actor TEXT NOT NULL, action TEXT NOT NULL, target TEXT, meta JSONB, ip TEXT, created_at TIMESTAMPTZ DEFAULT NOW())`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_log_actor ON audit_log(actor)`,
     // Indices para performance
     `CREATE INDEX IF NOT EXISTS idx_license_keys_key_code ON license_keys(key_code)`,
     `CREATE INDEX IF NOT EXISTS idx_payments_payment_id ON payments(payment_id)`,
