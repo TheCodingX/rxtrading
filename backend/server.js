@@ -8,6 +8,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const Stripe = require('stripe');
 const { pool, initDB } = require('./database');
+const v44 = require('./v44-engine');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -2343,17 +2344,19 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Required env vars validation at boot
 function validateEnv() {
+  // 2026-04-22: BROKER_MASTER_KEY is REQUIRED in prod (encryption). Webhook secrets are warnings —
+  // server boots without them, but the specific webhook endpoint rejects requests in prod.
   const required = ['JWT_SECRET', 'DATABASE_URL'];
   const recommended = ['CORS_ORIGIN'];
-  // v2.0: BROKER_MASTER_KEY REQUIRED in production (cannot encrypt broker keys without it)
-  const prodRequired = ['STRIPE_WEBHOOK_SECRET', 'NOWPAYMENTS_IPN_SECRET', 'MP_WEBHOOK_SECRET', 'BROKER_MASTER_KEY'];
+  const prodRequired = ['BROKER_MASTER_KEY'];
+  const prodRecommended = ['STRIPE_WEBHOOK_SECRET', 'NOWPAYMENTS_IPN_SECRET', 'MP_WEBHOOK_SECRET'];
   const missing = [];
   const warnings = [];
   required.forEach(k => { if (!process.env[k]) missing.push(k); });
   recommended.forEach(k => { if (!process.env[k]) warnings.push(k); });
   if (process.env.NODE_ENV === 'production') {
     prodRequired.forEach(k => { if (!process.env[k]) missing.push(`${k} (production)`); });
-    // BROKER_MASTER_KEY strict format: 64 hex chars (32 bytes)
+    prodRecommended.forEach(k => { if (!process.env[k]) warnings.push(`${k} (production — webhook will reject requests until set)`); });
     const bmk = process.env.BROKER_MASTER_KEY || '';
     if (bmk && !/^[a-f0-9]{64}$/i.test(bmk)) {
       missing.push('BROKER_MASTER_KEY (must be 64 hex chars)');
@@ -2370,6 +2373,80 @@ function validateEnv() {
   }
   return true;
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// APEX V44 LIVE SIGNALS FEED — Server-side 24/7 scanner
+// ══════════════════════════════════════════════════════════════════════
+
+const V44_SIGNAL_STORE = {
+  signals: [],       // { id, symbol, signal, entry, tp, sl, confidence, window_type, funding, funding_zscore, size_multiplier, quality_score, leverage, hold_hours, engine, created_at, expires_at }
+  lastScan: null,    // ISO timestamp of last full scan
+  lastScanResult: null, // { scanned, signals_found, window_type, reason }
+  stats: { totalScans: 0, totalSignals: 0, errors: 0 }
+};
+const V44_MAX_FEED_SIZE = 500;    // Keep last 500 signals in memory
+const V44_SCAN_INTERVAL_MS = 10 * 60 * 1000; // 10 min — V44 fires on 1h bar closes anyway
+const V44_SIGNAL_TTL_MS = 4 * 60 * 60 * 1000; // 4h hold window of V44
+const V44_DEDUP_WINDOW_MS = 55 * 60 * 1000; // 55 min per pair (matches frontend cooldown)
+
+function _v44Dedup(sym, signalType){
+  const cutoff = Date.now() - V44_DEDUP_WINDOW_MS;
+  return V44_SIGNAL_STORE.signals.some(s => s.symbol === sym && s.signal === signalType && s.created_at > cutoff);
+}
+
+async function _v44RunScanOnce(){
+  try {
+    const res = await v44.scanAllPairs();
+    V44_SIGNAL_STORE.lastScan = new Date().toISOString();
+    V44_SIGNAL_STORE.lastScanResult = { scanned: res.scanned, signals_found: res.signals.length, window_type: res.window_type || null, reason: res.reason };
+    V44_SIGNAL_STORE.stats.totalScans++;
+    for(const sig of res.signals){
+      if(_v44Dedup(sig.symbol, sig.signal)) continue;
+      const rec = {
+        id: crypto.randomBytes(6).toString('hex'),
+        ...sig,
+        created_at: Date.now(),
+        expires_at: Date.now() + V44_SIGNAL_TTL_MS
+      };
+      V44_SIGNAL_STORE.signals.push(rec);
+      V44_SIGNAL_STORE.stats.totalSignals++;
+    }
+    // Trim: keep only signals from last 24h or until cap
+    const dayAgo = Date.now() - 24*60*60*1000;
+    V44_SIGNAL_STORE.signals = V44_SIGNAL_STORE.signals.filter(s => s.created_at > dayAgo).slice(-V44_MAX_FEED_SIZE);
+    if(res.signals.length) console.log(`[V44 Scan] ${res.signals.length} new signals · window=${res.window_type}`);
+  } catch(e){
+    V44_SIGNAL_STORE.stats.errors++;
+    console.warn('[V44 Scan] error:', e.message);
+  }
+}
+
+function startV44Scheduler(){
+  // Run once on startup
+  _v44RunScanOnce();
+  // Recurring scan
+  setInterval(_v44RunScanOnce, V44_SCAN_INTERVAL_MS);
+  console.log(`[V44 Scheduler] started · scan every ${V44_SCAN_INTERVAL_MS/60000} min · universe=${v44.SAFE_FUNDING_PARAMS.UNIVERSE.length} pairs`);
+}
+
+// Public endpoint — no auth required, consumed by all clients
+app.get('/api/public-signals', (req, res) => {
+  const limit = Math.min(100, parseInt(req.query.limit, 10) || 50);
+  const since = parseInt(req.query.since, 10) || 0;
+  const pool = V44_SIGNAL_STORE.signals
+    .filter(s => s.created_at > since)
+    .slice(-limit)
+    .slice().reverse();
+  res.json({
+    signals: pool,
+    count: pool.length,
+    last_scan: V44_SIGNAL_STORE.lastScan,
+    last_result: V44_SIGNAL_STORE.lastScanResult,
+    stats: V44_SIGNAL_STORE.stats,
+    universe: v44.SAFE_FUNDING_PARAMS.UNIVERSE,
+    server_time: Date.now()
+  });
+});
 
 async function start() {
   try {
@@ -2396,6 +2473,9 @@ async function start() {
       console.log(`  ║   USDT:   ${NOWPAYMENTS_API_KEY ? 'NOWPayments OK' : 'Manual only'}          ║`);
       console.log(`  ║   Broker: ${brokerOk ? 'Binance Futures ON' : 'DISABLED'}         ║`);
       console.log(`  ╚══════════════════════════════════════╝\n`);
+
+      // 2026-04-23: Start V44 server-side signals scheduler (runs 24/7 regardless of active users)
+      try { startV44Scheduler(); } catch(e){ console.warn('[Startup] V44 scheduler error:', e.message); }
 
       // Validate APEX v42 PRO+ pair universe against live Binance exchangeInfo
       if (brokerOk) {
