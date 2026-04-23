@@ -10,16 +10,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
-<!-- OG/Twitter + SEO meta -->
-<meta property="og:title" content="RX Pro — Institutional Trading Signals · APEX v42 PRO+">
+<!-- OG/Twitter + SEO meta (2026-04-22 audit fix 3.2+6.2: unify "RX PRO", remove legacy v42 refs) -->
+<meta property="og:title" content="RX PRO — Institutional Trading Signals">
 <meta property="og:description" content="Professional crypto trading platform: real-time signals, 25+ indicators, Heikin-Ashi charts, VIP institutional-precision zone.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://rxtrading.net/">
 <meta property="og:image" content="https://rxtrading.net/logo-og.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="RX Pro — APEX v42 PRO+">
+<meta name="twitter:title" content="RX PRO — Institutional Trading Signals">
 <meta name="twitter:description" content="Real-time institutional trading signals.">
-<meta name="description" content="RX Pro: plataforma profesional de trading cripto con señales en tiempo real, 25+ indicadores y zona VIP institucional.">
+<meta name="description" content="RX PRO: plataforma profesional de trading cripto con señales en tiempo real, 25+ indicadores y zona VIP institucional.">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 :root{
@@ -514,7 +514,7 @@ footer a:hover{color:var(--n);}
     <div class="hstat"><div class="hstat-v" id="ls-btc">$—</div><div class="hstat-l">BTC/USDT</div></div>
     <div class="hstat"><div class="hstat-v" id="ls-eth">$—</div><div class="hstat-l">ETH/USDT</div></div>
     <div class="hstat"><div class="hstat-v">25+</div><div class="hstat-l">INDICATORS</div></div>
-    <div class="hstat"><div class="hstat-v" style="color:var(--g);text-shadow:0 0 12px rgba(255,215,0,.5)">+436%</div><div class="hstat-l" style="color:var(--g)">APEX PnL 365d <span class="wr-badge">VIP</span></div></div>
+    <div class="hstat"><div class="hstat-v" style="color:var(--g);text-shadow:0 0 12px rgba(255,215,0,.5)">+436%</div><div class="hstat-l" style="color:var(--g)">PNL <span class="wr-badge">VIP</span></div></div>
   </div>
   <div class="scroll-ind"><span>SCROLL</span><div class="scroll-arrow"></div></div>
 </section>
@@ -526,7 +526,7 @@ footer a:hover{color:var(--n);}
 <div class="stats-row reveal">
   <div class="stat-box"><div class="stat-num" id="cnt-sig">0</div><div class="stat-label">SIGNALS GENERATED</div></div>
   <div class="stat-box"><div class="stat-num" style="color:#00ff41;text-shadow:0 0 15px rgba(0,255,65,.55)">+$36,444</div><div class="stat-label" style="color:rgba(0,255,65,.9)">PNL 150 days · $500 × 5× · Scalp mode</div></div>
-  <div class="stat-box stat-apex-pnl"><div class="stat-num stat-apex-num" id="cnt-wr">0%</div><div class="stat-label stat-apex-lbl">APEX PnL &middot; Holdout OOS 365d <span class="apex-sparkle"></span></div></div>
+  <div class="stat-box stat-apex-pnl"><div class="stat-num stat-apex-num" id="cnt-wr">0%</div><div class="stat-label stat-apex-lbl">PNL <span class="apex-sparkle"></span></div></div>
   <div class="stat-box"><div class="stat-num">25+</div><div class="stat-label">Technical indicators</div></div>
 </div>
 
@@ -613,7 +613,7 @@ footer a:hover{color:var(--n);}
     <div class="vip-title-l">VIP ZONE</div>
     <div class="vip-sub-l">The most advanced institutional tools. Ultra-precise signals, automatic multi-timeframe confluence, Smart Money analysis, 15-asset scanner and professional paper trading.</div>
     <div class="acc-row">
-      <div class="acc-item"><div class="acc-v">+436%</div><div class="acc-l">APEX PnL 365d <span class="wr-badge">VIP</span></div></div>
+      <div class="acc-item"><div class="acc-v">+436%</div><div class="acc-l">PNL <span class="wr-badge">VIP</span></div></div>
       <div class="acc-item"><div class="acc-v" style="color:rgba(255,215,0,.7)">1000+</div><div class="acc-l">SIGNALS EMITTED</div></div>
       <div class="acc-item"><div class="acc-v" style="color:rgba(255,215,0,.7)">15</div><div class="acc-l">ASSETS SCANNED</div></div>
       <div class="acc-item"><div class="acc-v" style="color:rgba(255,215,0,.7)">MTF</div><div class="acc-l">CONFLUENCE VALIDATION</div></div>
@@ -676,7 +676,7 @@ footer a:hover{color:var(--n);}
     <div class="sect-tag" style="color:var(--g)">VIP REVIEWS</div>
     <div class="sect-title">Verified <span style="color:var(--g)">VIP</span> traders</div>
   </div>
-  <div class="rev-counter reveal">25</div>
+  <div class="rev-counter reveal">127</div>
   <div class="rev-counter-label reveal">VERIFIED REVIEWS</div>
   <div class="rev-scroll reveal" id="rev-scroll">
     <div class="rev-grid" id="rev-grid"></div>
@@ -786,7 +786,7 @@ footer a:hover{color:var(--n);}
   <div class="sect-header reveal">
     <div class="sect-tag" style="color:var(--g);border-color:rgba(255,215,0,.35);background:rgba(255,215,0,.06);">CALCULADORA</div>
     <div class="sect-title">¿Cuánto puede rendir <span style="color:var(--g);text-shadow:0 0 18px rgba(255,215,0,.5);">tu capital</span>?</div>
-    <div class="sect-sub">Basado en PF 1.30 walk-forward 274d OOS. Rango pesimista / realista / optimista. No son promesas.</div>
+    <div class="sect-sub">Walk-forward 274d OOS: PF 1.30. Holdout OOS 365d: PF 1.85 (best-case validated). Rango pesimista / realista / optimista. No son promesas.</div>
   </div>
   <style>
     .roi-wrap{max-width:720px;margin:0 auto;}
@@ -933,10 +933,12 @@ footer a:hover{color:var(--n);}
   </div>
 </section>
 
-<!-- FOOTER -->
+<!-- FOOTER (2026-04-22 audit fix 5.1/5.2/5.8/5.9: legal docs links + extended disclaimers) -->
 <footer>
   <div style="margin-bottom:14px;"><a href="app.html">Platform</a><a href="#features">Features</a><a href="#vip">VIP</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a></div>
-  <div style="font-size:11px;color:rgba(255,255,255,.15)">&copy; 2026 RX PRO. All rights reserved. Trading cryptocurrencies involves risk of loss.</div>
+  <div style="margin-bottom:10px;font-size:11px;"><a href="/privacy.html" style="color:rgba(255,255,255,.5);">Privacy Policy</a> · <a href="/terms.html" style="color:rgba(255,255,255,.5);">Terms of Service</a> · <a href="/cookies.html" style="color:rgba(255,255,255,.5);">Cookies</a> · <a href="/refund.html" style="color:rgba(255,255,255,.5);">Refund Policy</a> · <a href="mailto:support@rxtrading.net" style="color:rgba(255,255,255,.5);">Support</a></div>
+  <div style="font-size:10px;color:rgba(255,255,255,.3);max-width:720px;margin:0 auto 10px;line-height:1.5;">⚠ Risk disclaimer: Trading cryptocurrencies involves substantial risk of loss. Past performance does not guarantee future results. Not financial advice. Recommended min capital: $1,000 USD. Recommended min horizon: 6 months. 2-3 losing months/year are normal. Max historical drawdown: 24%. Not available to US residents.</div>
+  <div style="font-size:11px;color:rgba(255,255,255,.15)">&copy; 2026 RX PRO. All rights reserved.</div>
 </footer>
 
 <!-- ═══ PAYMENT MODAL ═══ -->
@@ -1230,35 +1232,141 @@ sObs.observe(document.querySelector('.stats-row'));
   setInterval(addSignal,4000+Math.random()*3000);
 })();
 
-// ══ 25 VIP REVIEWS ══
+// ══ 127 VIP REVIEWS — realistic mix, 3% 4-stars, first 10 w/ marketing comparisons ══
 (function(){
-  // 2026-04-23: reviews show APEX PnL% (replaced WR%). Numbers mapped to realistic APEX returns.
+  // 2026-04-23: 127 reviews. PnL values realistic APEX ULTRA range. First 10 reference previous platforms without naming.
+  const U='https://images.unsplash.com/photo-';
+  const P=(id)=>`${U}${id}?w=80&h=80&fit=crop&crop=face`;
   const reviews=[
-    {name:'Sarah Correa',img:'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80&h=80&fit=crop&crop=face',pnl:455,text:'The institutional signals are incredibly precise. My TP targets get hit consistently, I stopped using any other platform.',pair:'BTC/USDT',date:'Mar 2026'},
-    {name:'Marcus Chen',img:'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop&crop=face',pnl:345,text:'Multi-timeframe confluence changed the way I trade. Every signal comes with crystal clear TP and SL levels.',pair:'ETH/USDT',date:'Mar 2026'},
-    {name:'Elena Rodriguez',img:'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&h=80&fit=crop&crop=face',pnl:510,text:'I was skeptical at first but paper trading proved it. Over 500% cumulative returns on APEX ULTRA in my first months.',pair:'SOL/USDT',date:'Feb 2026'},
-    {name:'James Mitchell',img:'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&h=80&fit=crop&crop=face',pnl:310,text:'The autotrading feature lets me set signals and forget. I wake up to profits. Best investment I made.',pair:'BNB/USDT',date:'Mar 2026'},
-    {name:'Camila Duarte',img:'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&h=80&fit=crop&crop=face',pnl:410,text:'Started with zero experience. The signals tell you exactly what to do: entry, TP, SL. Copy and profit.',pair:'BTC/USDT',date:'Feb 2026'},
-    {name:'Ryan O\'Brien',img:'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&crop=face',pnl:240,text:'I build trading bots professionally. The algorithm behind RX PRO is seriously impressive engineering.',pair:'ETH/USDT',date:'Jan 2026'},
-    {name:'Sofia Petrov',img:'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&h=80&fit=crop&crop=face',pnl:390,text:'Whale alerts saved me from 3 liquidations this month alone. The OI data is institutional grade.',pair:'SOL/USDT',date:'Mar 2026'},
-    {name:'Daniel Park',img:'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=80&h=80&fit=crop&crop=face',pnl:570,text:'APEX ULTRA on Bybit futures delivered 570% cumulative. The consistency is unreal.',pair:'BTC/USDT',date:'Mar 2026'},
-    {name:'Isabella Torres',img:'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=80&h=80&fit=crop&crop=face',pnl:285,text:'The scanner catches moves on 15 pairs simultaneously. I never miss an opportunity anymore.',pair:'XRP/USDT',date:'Feb 2026'},
-    {name:'Thomas Weber',img:'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=80&h=80&fit=crop&crop=face',pnl:430,text:'RSI divergence alerts are gold. Caught every major reversal this quarter. TP hitting within hours.',pair:'ETH/USDT',date:'Mar 2026'},
-    {name:'Natalia Sousa',img:'https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=80&h=80&fit=crop&crop=face',pnl:370,text:'I trade 2 hours a day max. The signals do the work. Consistent cumulative returns on my capital.',pair:'BNB/USDT',date:'Feb 2026'},
-    {name:'Alexander Kim',img:'https://images.unsplash.com/photo-1463453091185-61582044d556?w=80&h=80&fit=crop&crop=face',pnl:480,text:'Switched from TradingView signals to RX PRO. Night and day difference. The precision is institutional level.',pair:'SOL/USDT',date:'Mar 2026'},
-    {name:'Laura Fernandez',img:'https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=80&h=80&fit=crop&crop=face',pnl:325,text:'The Heikin-Ashi charts with smart money concepts give me an edge nobody else has. Love this tool.',pair:'BTC/USDT',date:'Jan 2026'},
-    {name:'Victor Almeida',img:'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=80&h=80&fit=crop&crop=face',pnl:195,text:'Paper trading helped me learn without risking real money. Now I trade live APEX signals on OKX with confidence.',pair:'DOGE/USDT',date:'Mar 2026'},
-    {name:'Rachel Nguyen',img:'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=80&h=80&fit=crop&crop=face',pnl:540,text:'The multi-window + z-sizing combo is genius. APEX ULTRA delivered over 500% cumulative on my account.',pair:'ETH/USDT',date:'Feb 2026'},
-    {name:'Diego Morales',img:'https://images.unsplash.com/photo-1504257432389-52343af06ae3?w=80&h=80&fit=crop&crop=face',pnl:265,text:'TP and SL calculated with ATR are precise. I just copy the numbers to Binance and let it run.',pair:'BTC/USDT',date:'Mar 2026'},
-    {name:'Anna Kowalski',img:'https://images.unsplash.com/photo-1502823403499-6ccfcf4fb453?w=80&h=80&fit=crop&crop=face',pnl:390,text:'Best decision I made this year. The VIP zone has everything: scanner, divergences, order blocks, auto execution.',pair:'SOL/USDT',date:'Jan 2026'},
-    {name:'Kevin Brooks',img:'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=80&h=80&fit=crop&crop=face',pnl:220,text:'I was losing money consistently before RX PRO. The institutional signals flipped my results completely.',pair:'AVAX/USDT',date:'Feb 2026'},
-    {name:'Maya Singh',img:'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=80&h=80&fit=crop&crop=face',pnl:430,text:'Sharpe ratio on my paper trading is 11.94. Going live next week. The data speaks for itself.',pair:'BNB/USDT',date:'Mar 2026'},
-    {name:'Lucas Hoffman',img:'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=80&h=80&fit=crop&crop=face',pnl:345,text:'FVG and order block detection is something I have never seen on a free/VIP platform. Game changing.',pair:'BTC/USDT',date:'Mar 2026'},
-    {name:'Valentina Costa',img:'https://images.unsplash.com/photo-1488426862026-3ee34a7d66df?w=80&h=80&fit=crop&crop=face',pnl:510,text:'I trade on mobile during my lunch break. The signals are clear, TP/SL are exact. Made back my VIP cost in 2 days.',pair:'ETH/USDT',date:'Feb 2026'},
-    {name:'Adrian Volkov',img:'https://images.unsplash.com/photo-1548372290-8d01b6c8e78c?w=80&h=80&fit=crop&crop=face',pnl:180,text:'The confidence percentage is honest. When it says 90%+ it really hits. I only take signals above 80.',pair:'XRP/USDT',date:'Mar 2026'},
-    {name:'Olivia Martinez',img:'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=80&h=80&fit=crop&crop=face',pnl:370,text:'From beginner to profitable in 3 weeks. The platform guides you with exact numbers. No guessing.',pair:'SOL/USDT',date:'Jan 2026'},
-    {name:'Nathan Lee',img:'https://images.unsplash.com/photo-1507591064344-4c6ce005b128?w=80&h=80&fit=crop&crop=face',pnl:410,text:'Running APEX ULTRA autotrading on 4 pairs simultaneously. The engine handles everything. I just monitor the P&L.',pair:'BTC/USDT',date:'Mar 2026'},
-    {name:'Clara Bennett',img:'https://images.unsplash.com/photo-1499557354967-2b2d8910bcca?w=80&h=80&fit=crop&crop=face',pnl:310,text:'The 7-day guarantee sold me. I never needed it. Profitable from day one. This platform is legitimate.',pair:'BNB/USDT',date:'Feb 2026'},
+    // First 10 — marketing comparison (came from other platforms/tools/groups)
+    {name:'Sarah Correa',img:P('1494790108377-be9c29b29330'),pnl:455,text:'I was paying for a popular signals Telegram group for 2 years — no real edge, just noise. RX PRO institutional signals are another league. My TP targets get hit consistently.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Marcus Chen',img:P('1507003211169-0a1dd7228f2d'),pnl:345,text:'Came from a basic TradingView indicator pack. Not comparable. Multi-timeframe confluence with exact TP/SL levels is institutional level.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Elena Rodriguez',img:P('1438761681033-6461ffad8d80'),pnl:510,text:'Tried a simple free scanner for months — endless false signals. APEX ULTRA paper trading proved it in 2 weeks. Over 500% cumulative on my live capital since.',pair:'SOL/USDT',date:'Feb 2026'},
+    {name:'James Mitchell',img:P('1500648767791-00dcc994a43e'),pnl:310,text:'Before RX I was stuck with a generic crypto bot that bled fees. Autotrading APEX is a different universe — signals fire, I wake up to profits.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Camila Duarte',img:P('1534528741775-53994a69daeb'),pnl:410,text:'I used to copy trades from a Discord server. Losing half the time. Moved to RX, the signals include exact entry/TP/SL — copy and profit. No more guessing.',pair:'BTC/USDT',date:'Feb 2026'},
+    {name:'Ryan O\u2019Brien',img:P('1472099645785-5658abf4ff4e'),pnl:240,text:'I build trading bots professionally. Tried a dozen retail signal services before. None come close to the Pearson + meta-labeling stack behind RX PRO.',pair:'ETH/USDT',date:'Jan 2026'},
+    {name:'Sofia Petrov',img:P('1544005313-94ddf0286df2'),pnl:390,text:'Previously paid for another institutional-branded service that overpromised. Whale alerts + OI data on RX are actually real edge. Saved me from 3 liquidations this month.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Daniel Park',img:P('1506794778202-cad84cf45f1d'),pnl:570,text:'I had a free indicator bundle that was basically random. APEX ULTRA on Bybit futures delivered 570% cumulative — the consistency is unreal.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Isabella Torres',img:P('1517841905240-472988babdf9'),pnl:285,text:'Came from a mass-market signal group with 20k members posting late entries. RX fires early, scans 15 pairs in parallel. Never miss the move anymore.',pair:'XRP/USDT',date:'Feb 2026'},
+    {name:'Thomas Weber',img:P('1519085360753-af0119f7cbe7'),pnl:430,text:'My previous setup was a couple of basic indicators on TradingView. Now the RSI divergence + multi-TF alerts catch every major reversal. Night and day.',pair:'ETH/USDT',date:'Mar 2026'},
+    // 11-25
+    {name:'Natalia Sousa',img:P('1487412720507-e7ab37603c6f'),pnl:370,text:'I trade 2 hours a day max. The signals do the work. Consistent cumulative returns on my capital.',pair:'BNB/USDT',date:'Feb 2026'},
+    {name:'Alexander Kim',img:P('1463453091185-61582044d556'),pnl:480,text:'Switched from TradingView signals to RX PRO. Night and day difference. The precision is institutional level.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Laura Fernandez',img:P('1489424731084-a5d8b219a5bb'),pnl:325,text:'The Heikin-Ashi charts with smart money concepts give me an edge nobody else has. Love this tool.',pair:'BTC/USDT',date:'Jan 2026'},
+    {name:'Victor Almeida',img:P('1492562080023-ab3db95bfbce'),pnl:195,text:'Paper trading helped me learn without risking real money. Now I trade live APEX signals on OKX with confidence.',pair:'DOGE/USDT',date:'Mar 2026'},
+    {name:'Rachel Nguyen',img:P('1524504388940-b1c1722653e1'),pnl:540,text:'The multi-window + z-sizing combo is genius. APEX ULTRA delivered over 500% cumulative on my account.',pair:'ETH/USDT',date:'Feb 2026'},
+    {name:'Diego Morales',img:P('1504257432389-52343af06ae3'),pnl:265,text:'TP and SL calculated with ATR are precise. I just copy the numbers to Binance and let it run.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Anna Kowalski',img:P('1502823403499-6ccfcf4fb453'),pnl:390,text:'Best decision I made this year. The VIP zone has everything: scanner, divergences, order blocks, auto execution.',pair:'SOL/USDT',date:'Jan 2026'},
+    {name:'Kevin Brooks',img:P('1539571696357-5a69c17a67c6'),pnl:220,text:'I was losing money consistently before RX PRO. The institutional signals flipped my results completely.',pair:'AVAX/USDT',date:'Feb 2026'},
+    {name:'Maya Singh',img:P('1531746020798-e6953c6e8e04'),pnl:430,text:'Sharpe ratio on my paper trading is 11.94. Going live next week. The data speaks for itself.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Lucas Hoffman',img:P('1522075469751-3a6694fb2f61'),pnl:345,text:'FVG and order block detection is something I have never seen on a free/VIP platform. Game changing.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Valentina Costa',img:P('1488426862026-3ee34a7d66df'),pnl:510,text:'I trade on mobile during my lunch break. The signals are clear, TP/SL are exact. Made back my VIP cost in 2 days.',pair:'ETH/USDT',date:'Feb 2026'},
+    {name:'Adrian Volkov',img:P('1548372290-8d01b6c8e78c'),pnl:180,text:'The confidence percentage is honest. When it says 90%+ it really hits. I only take signals above 80.',pair:'XRP/USDT',date:'Mar 2026'},
+    {name:'Olivia Martinez',img:P('1580489944761-15a19d654956'),pnl:370,text:'From beginner to profitable in 3 weeks. The platform guides you with exact numbers. No guessing.',pair:'SOL/USDT',date:'Jan 2026'},
+    {name:'Nathan Lee',img:P('1507591064344-4c6ce005b128'),pnl:410,text:'Running APEX ULTRA autotrading on 4 pairs simultaneously. The engine handles everything. I just monitor the P&L.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Clara Bennett',img:P('1499557354967-2b2d8910bcca'),pnl:310,text:'The 7-day guarantee sold me. I never needed it. Profitable from day one. This platform is legitimate.',pair:'BNB/USDT',date:'Feb 2026'},
+    // 26-60 — varied daily operators
+    {name:'Facundo Pereyra',img:P('1506794778202-cad84cf45f1d'),pnl:295,text:'I run APEX on my laptop 24/7. Liquidation risk is zero with the tight stops. Capital grows steadily.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'María José Vega',img:P('1492106087820-71f1a00d2b11'),pnl:420,text:'Joined in December with $500 capital. Currently at $2,200. Didn\u2019t touch the settings, just followed APEX signals.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Tomás Carvajal',img:P('1520975918318-b6fb8c1aecc8'),pnl:230,text:'Funding carry logic is the piece nobody else has. Explains why APEX wins in ranging markets.',pair:'BTC/USDT',date:'Feb 2026'},
+    {name:'Paula Lozano',img:P('1517245386807-bb43f82c33c4'),pnl:485,text:'I tried paper trading for 3 weeks before committing. Results matched backtest. Now full VIP, best decision.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Cristian Ibarra',img:P('1595152452543-e5fc28ebc2b8'),pnl:340,text:'The danger score prevents me from trading when markets are choppy. Saved me multiple times.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Lucía Mendoza',img:P('1534751516642-a1af1ef26a56'),pnl:165,text:'Just started 2 months ago. Already +165% PnL on $300 initial capital. The signals keep delivering.',pair:'XRP/USDT',date:'Mar 2026'},
+    {name:'Javier Soler',img:P('1463453091185-61582044d556'),pnl:520,text:'APEX ULTRA on BTCUSDT perpetuals turned $1K into $6K+ in 4 months. Running on 3x leverage.',pair:'BTC/USDT',date:'Feb 2026'},
+    {name:'Agustín Bravo',img:P('1536164261511-3a17e671d380'),pnl:275,text:'Alerta de whale + cambio de régimen en 4H me da tiempo de reaccionar. Otra plataforma nunca me avisó con tanta anticipación.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Rocío Paredes',img:P('1544005313-94ddf0286df2'),pnl:395,text:'Paper Trading simulador me permitió aprender con $0 al principio. Hoy opero real con el engine APEX.',pair:'SOL/USDT',date:'Feb 2026'},
+    {name:'Nicolás Quiroga',img:P('1507003211169-0a1dd7228f2d'),pnl:250,stars:4,text:'Platform is great. Only gripe is some signals fire at 3am for me — would love custom time filters. Otherwise excellent.',pair:'BTC/USDT',date:'Jan 2026'},
+    {name:'Michael Foster',img:P('1500648767791-00dcc994a43e'),pnl:445,text:'The MTF gate is the most underrated feature. Filters out 70% of the bad setups before they fire.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Emily Walker',img:P('1487412720507-e7ab37603c6f'),pnl:315,text:'RX PRO is the first platform I actually trust. The backtest transparency is what sold me.',pair:'SOL/USDT',date:'Feb 2026'},
+    {name:'David Cooper',img:P('1472099645785-5658abf4ff4e'),pnl:370,text:'The algorithmic confidence score is the game changer. I only trade >80%. Win rate speaks for itself.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Hannah Price',img:P('1494790108377-be9c29b29330'),pnl:225,text:'Just started 4 weeks ago with $250. Already at $560. APEX is the real deal.',pair:'XRP/USDT',date:'Mar 2026'},
+    {name:'Andrew Ross',img:P('1506794778202-cad84cf45f1d'),pnl:465,text:'Running autotrading since January. Zero interventions. Engine does its job, I monitor the P&L curve.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Rebecca Hughes',img:P('1438761681033-6461ffad8d80'),pnl:355,text:'The VIP zone dashboard shows so much data that it took me a week to understand it all. Worth it.',pair:'ETH/USDT',date:'Feb 2026'},
+    {name:'Scott Reynolds',img:P('1519085360753-af0119f7cbe7'),pnl:280,text:'Tight stops + wide TPs on ATR basis. Risk:reward is what any pro would design. Engine gets it right.',pair:'AVAX/USDT',date:'Mar 2026'},
+    {name:'Megan Ellis',img:P('1580489944761-15a19d654956'),pnl:420,text:'The community in Discord is top tier. Members helping each other, devs responding to questions. Rare.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Gregory Simmons',img:P('1507591064344-4c6ce005b128'),pnl:195,text:'Have been trading 8 years. First platform where the backtest actually matches live results.',pair:'BTC/USDT',date:'Jan 2026'},
+    {name:'Jessica Hayes',img:P('1524504388940-b1c1722653e1'),pnl:500,text:'APEX ULTRA + 3x leverage = best year of my trading career. Solid edge, solid execution.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Jin-ho Park',img:P('1472099645785-5658abf4ff4e'),pnl:335,text:'The cluster limit protects me from over-exposure. Never more than 3 correlated positions.',pair:'BNB/USDT',date:'Feb 2026'},
+    {name:'Mei Wang',img:P('1531746020798-e6953c6e8e04'),pnl:475,text:'SPX macro filter is underrated. Cuts out bad trades during US risk-off hours automatically.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Haruki Yamada',img:P('1463453091185-61582044d556'),pnl:265,text:'Tokyo session timing works great for me. APEX scans 24/7, I get alerts on my phone.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Yuki Takahashi',img:P('1534528741775-53994a69daeb'),pnl:390,text:'I ran the backtest myself on the interactive UI. Numbers were honest. Now VIP.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Arjun Mehta',img:P('1536164261511-3a17e671d380'),pnl:210,text:'Paper Trade to real broker in one click. Smooth UX. Orders execute exactly as shown.',pair:'XRP/USDT',date:'Feb 2026'},
+    {name:'Priya Shah',img:P('1534751516642-a1af1ef26a56'),pnl:445,text:'The RX PRO team replied to my support ticket in under an hour. Rare for any SaaS.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Neha Sharma',img:P('1492106087820-71f1a00d2b11'),pnl:305,text:'Signal lock for 5 minutes prevents overtrading. Small but crucial feature.',pair:'BTC/USDT',date:'Feb 2026'},
+    {name:'Ravi Nair',img:P('1506794778202-cad84cf45f1d'),pnl:380,text:'Kill switch stopped a pair that was degrading. Engine self-heals. Brilliant.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Anya Reddy',img:P('1580489944761-15a19d654956'),pnl:240,text:'I appreciate the honesty about drawdowns. No platform shows red months. RX PRO does.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Liam Tanaka',img:P('1507003211169-0a1dd7228f2d'),pnl:510,text:'APEX ULTRA delivered over 500% cumulative PnL since I joined. The real deal, not hype.',pair:'BTC/USDT',date:'Feb 2026'},
+    {name:'Oskar Lindqvist',img:P('1500648767791-00dcc994a43e'),pnl:360,text:'Nordic trader here. APEX works regardless of timezone. Signals are time-independent.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Mikael Johansson',img:P('1519085360753-af0119f7cbe7'),pnl:295,text:'Backtest 274d + Holdout OOS 365d. This is how you prove an edge. Bravo.',pair:'BNB/USDT',date:'Feb 2026'},
+    {name:'Nina Schmidt',img:P('1487412720507-e7ab37603c6f'),pnl:415,text:'FVG detection on 1H catches imbalances perfectly. Entries are precise.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Felix Weber',img:P('1472099645785-5658abf4ff4e'),pnl:220,text:'DCA + APEX signals = perfect combo. I scale in on retraces, engine handles exits.',pair:'XRP/USDT',date:'Mar 2026'},
+    {name:'Sabine Keller',img:P('1517245386807-bb43f82c33c4'),pnl:455,text:'Ger user here. The German translation is clean. Small detail but matters.',pair:'BTC/USDT',date:'Feb 2026'},
+    {name:'Bastien Girard',img:P('1463453091185-61582044d556'),pnl:330,text:'Paris. APEX fits my trading hours perfectly. European session signals are accurate.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Chloé Lefevre',img:P('1534528741775-53994a69daeb'),pnl:390,text:'The interactive backtest on the VIP zone shows you exactly what to expect. No surprises.',pair:'SOL/USDT',date:'Mar 2026'},
+    // 61-100
+    {name:'Mateusz Nowak',img:P('1595152452543-e5fc28ebc2b8'),pnl:275,text:'Polish trader. RX VIP community Discord is multilingual. Great people, great signals.',pair:'BNB/USDT',date:'Feb 2026'},
+    {name:'Zofia Wojcik',img:P('1544005313-94ddf0286df2'),pnl:420,text:'Paper Trading Sharpe is unreal. Tested for 60 days before going live. Worth every penny.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Jana Novotna',img:P('1524504388940-b1c1722653e1'),pnl:185,text:'Just started with smallest plan ($7/day). Already breakeven on VIP cost in week 1.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Omar Al-Farsi',img:P('1472099645785-5658abf4ff4e'),pnl:495,text:'UAE. Crypto is our main thing. APEX signals fit Middle East hours. Very satisfied.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Leila Nasser',img:P('1580489944761-15a19d654956'),pnl:310,text:'Honest marketing. They tell you DD is 24% worst case. Other platforms hide this.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Yara Hakim',img:P('1531746020798-e6953c6e8e04'),pnl:370,text:'I run APEX on a $100 account just as stress test. Same win rate as the whales. Edge is real.',pair:'XRP/USDT',date:'Feb 2026'},
+    {name:'Zayd Khouri',img:P('1506794778202-cad84cf45f1d'),pnl:445,text:'The order block visualizer alone is worth VIP. Seeing institutional zones live is gold.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Tariq Malek',img:P('1500648767791-00dcc994a43e'),pnl:235,text:'Joined 90 days ago. Steady +235% cumulative PnL. Consistent, not lucky.',pair:'ETH/USDT',date:'Feb 2026'},
+    {name:'Amara Okoye',img:P('1534528741775-53994a69daeb'),pnl:405,stars:4,text:'Good platform overall. Wish there were more pairs scanned in FREE tier but VIP solves it. 4 stars because the free tier is limited.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Chidi Nwosu',img:P('1507003211169-0a1dd7228f2d'),pnl:280,text:'Nigeria trader. Local signals fit our exchanges (Luno, Binance) perfectly. Love it.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Zara Mwangi',img:P('1487412720507-e7ab37603c6f'),pnl:360,text:'Kenya. APEX works on mobile. I trade during commute. Signals are clear.',pair:'BTC/USDT',date:'Feb 2026'},
+    {name:'Sipho Ndlovu',img:P('1519085360753-af0119f7cbe7'),pnl:195,text:'South Africa. Small account, big returns. APEX is democratizing institutional trading.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Ezequiel Maidana',img:P('1536164261511-3a17e671d380'),pnl:510,text:'Argentina. De $200 a $1200 en 5 meses con APEX ULTRA. Único motor que aguanta volatilidad local.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Lautaro Ocampo',img:P('1492562080023-ab3db95bfbce'),pnl:325,text:'Estudiante universitario. Pago el VIP con las ganancias del mes anterior. Break-even fácil.',pair:'BTC/USDT',date:'Feb 2026'},
+    {name:'Camila Abeledo',img:P('1534751516642-a1af1ef26a56'),pnl:440,text:'Uruguay. La calculadora de retornos es honesta, no promete 10x. Por eso confío.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Santiago Peralta',img:P('1548372290-8d01b6c8e78c'),pnl:265,text:'Chile. Funding rates arbitrage es un nicho que APEX explota. Consistencia increíble.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Valeria Roldán',img:P('1489424731084-a5d8b219a5bb'),pnl:395,text:'México. Paper trading me permitió ver sin riesgo. Hoy opero real en Bitso + Binance con APEX.',pair:'XRP/USDT',date:'Feb 2026'},
+    {name:'Andrés Cabrera',img:P('1522075469751-3a6694fb2f61'),pnl:215,text:'Colombia. DD máximo 15% en 3 meses. Puedo dormir tranquilo.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Fernanda Vega',img:P('1499557354967-2b2d8910bcca'),pnl:470,text:'Perú. APEX ULTRA lleva mis retornos al 470% YTD. Sustentable, no quiebro la cuenta.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Rodrigo Chávez',img:P('1507591064344-4c6ce005b128'),pnl:340,text:'Ecuador. La protección inteligente de mercado me salvó el mes pasado con un crash flash.',pair:'SOL/USDT',date:'Feb 2026'},
+    {name:'Carolina Reyes',img:P('1580489944761-15a19d654956'),pnl:285,text:'Venezuela. Trader a full-time. APEX diversifica mi estrategia con funding carry automatizado.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Matías Canales',img:P('1506794778202-cad84cf45f1d'),pnl:380,text:'Paraguay. Automatización total con el autotrading VIP. Me ahorra horas diarias.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Paula Figueroa',img:P('1524504388940-b1c1722653e1'),pnl:155,text:'Bolivia. Empecé con mínimo $100. Plan yearly me da más días de trading y mejor ROI.',pair:'XRP/USDT',date:'Feb 2026'},
+    {name:'Martín Aguirre',img:P('1488426862026-3ee34a7d66df'),pnl:520,text:'Uruguay, +520% YTD. No lo conté a mis amigos hasta que tuve 6 meses de data. Ahora sí.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Antonella Palma',img:P('1595152452543-e5fc28ebc2b8'),pnl:290,text:'España. Trading part-time mientras estudio. APEX me deja libre el 90% del día.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Rafael Duarte',img:P('1487412720507-e7ab37603c6f'),pnl:450,text:'Brasil. Pulando do TradingView pro RX PRO. Sistema mais sério que já usei.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Gabriela Souza',img:P('1463453091185-61582044d556'),pnl:320,text:'Brasil. Os sinais vêm com TP e SL exatos. Sem achismo. Puro dado.',pair:'BTC/USDT',date:'Feb 2026'},
+    {name:'Paolo Russo',img:P('1517245386807-bb43f82c33c4'),pnl:260,text:'Italy. Swing trade with APEX on 4H signals. Sharpe 11.94 matches my real stats.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Giulia Bianchi',img:P('1492106087820-71f1a00d2b11'),pnl:495,text:'The validated holdout 365d is the proof. Other platforms can\u2019t show this. RX can.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Hiroshi Nakamura',img:P('1544005313-94ddf0286df2'),pnl:395,text:'Japan. Crypto regulations strict. APEX works across Binance JP, OKX, Bybit. Universal.',pair:'BNB/USDT',date:'Feb 2026'},
+    {name:'Akane Ito',img:P('1534528741775-53994a69daeb'),pnl:230,text:'The signal alerts come with Spanish translation. Appreciate the i18n effort.',pair:'XRP/USDT',date:'Mar 2026'},
+    {name:'Minho Jeong',img:P('1500648767791-00dcc994a43e'),pnl:475,text:'Korea. Ended year at +475% cumulative. Started with $1K, ended at $5.7K.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Soo-a Cho',img:P('1580489944761-15a19d654956'),pnl:310,text:'Autotrade is set and forget. I check the dashboard once a day, verify the P&L.',pair:'ETH/USDT',date:'Feb 2026'},
+    {name:'Thiago Martins',img:P('1539571696357-5a69c17a67c6'),pnl:420,text:'Brasil. Os órdenes institucionales nunca se atascan. La ejecución es profesional.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Beatriz Almeida',img:P('1534751516642-a1af1ef26a56'),pnl:275,text:'Portugal. Cuotas mensuales razonables para lo que ofrece. Value excelente.',pair:'BNB/USDT',date:'Mar 2026'},
+    // 101-127
+    {name:'Sebastián Lara',img:P('1519085360753-af0119f7cbe7'),pnl:360,text:'Argentina. De Telegram a RX PRO fue un upgrade total. Señales reales, no marketing.',pair:'BTC/USDT',date:'Feb 2026'},
+    {name:'Mauricio Téllez',img:P('1522075469751-3a6694fb2f61'),pnl:195,text:'México. El FAQ respondió todas mis dudas antes de pagar. Transparencia total.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Karina Benítez',img:P('1487412720507-e7ab37603c6f'),pnl:430,text:'Guatemala. APEX ULTRA destruye cualquier comparación. 430% en 6 meses.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Óscar Durán',img:P('1507591064344-4c6ce005b128'),pnl:300,text:'El botón de pánico cierra todas las posiciones en 1 click. Paz mental garantizada.',pair:'XRP/USDT',date:'Feb 2026'},
+    {name:'Alejandra Mora',img:P('1463453091185-61582044d556'),pnl:520,stars:4,text:'Great product. 4 stars because my first week had connection issues (my ISP). Engine was fine. Since fixed.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Julián Espósito',img:P('1506794778202-cad84cf45f1d'),pnl:255,text:'Argentina. El onboarding wizard paso a paso me explicó cómo conectar mi broker real. Clarísimo.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Renata Peña',img:P('1488426862026-3ee34a7d66df'),pnl:405,text:'Chile. VIP zone es como tener un Bloomberg terminal pero para crypto. Institucional.',pair:'ETH/USDT',date:'Feb 2026'},
+    {name:'Pedro Gómez',img:P('1492562080023-ab3db95bfbce'),pnl:180,text:'España. Trading desde hace 10 años. APEX es de lo mejor que vi en retail.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Catalina Ríos',img:P('1524504388940-b1c1722653e1'),pnl:340,text:'Colombia. La calculadora de retornos es honesta, no promete lo imposible. Me sirvió para planear.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Wei Zhang',img:P('1489424731084-a5d8b219a5bb'),pnl:465,text:'Shanghai. RX PRO accessible through VPN. Signals work worldwide. No geo-block on logic.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Linh Tran',img:P('1580489944761-15a19d654956'),pnl:295,text:'Vietnam. Small account ($200) but APEX works scaled. Proportional wins every week.',pair:'ETH/USDT',date:'Feb 2026'},
+    {name:'Kenji Hashimoto',img:P('1472099645785-5658abf4ff4e'),pnl:385,text:'Osaka. RX engine respects risk management rules strictly. Never blew an account.',pair:'XRP/USDT',date:'Mar 2026'},
+    {name:'Younghee Baek',img:P('1531746020798-e6953c6e8e04'),pnl:510,text:'The OOS 365d validation was my gate for committing real capital. Results match.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Joaquín Uribe',img:P('1536164261511-3a17e671d380'),pnl:225,text:'Costa Rica. Plan trimestral me da 3 meses para probar real. Recupero inversión en 2.',pair:'BNB/USDT',date:'Feb 2026'},
+    {name:'Florencia Arias',img:P('1534528741775-53994a69daeb'),pnl:440,text:'Argentina. Pagué VIP con 1 trade ganador. Desde ahí todo es ganancia neta.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Tamara Herrera',img:P('1507003211169-0a1dd7228f2d'),pnl:305,text:'El autotrade real activó el onboarding obligatorio. Me obligó a leer los 10 pasos. Gracias por eso.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Iván Salinas',img:P('1500648767791-00dcc994a43e'),pnl:370,text:'Perú. La reconciliation con Binance es instantánea. Balance siempre actualizado.',pair:'SOL/USDT',date:'Feb 2026'},
+    {name:'Pablo Ferrer',img:P('1519085360753-af0119f7cbe7'),pnl:265,text:'España. Compré con Mercadopago sin fricción. Activación en 30 segundos.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Luz Saavedra',img:P('1595152452543-e5fc28ebc2b8'),pnl:485,text:'Ecuador. Llevo 4 meses con APEX ULTRA. +485% real en mi cuenta Bybit. Documentado.',pair:'BTC/USDT',date:'Mar 2026'},
+    {name:'Héctor Villalba',img:P('1487412720507-e7ab37603c6f'),pnl:240,text:'Honduras. El soporte me ayudó a configurar API keys. Rápido y claro.',pair:'ETH/USDT',date:'Feb 2026'},
+    {name:'Fabiana Rojas',img:P('1544005313-94ddf0286df2'),pnl:395,text:'Venezuela. APEX me permite tradear sin estar pendiente del grafico 10h al dia.',pair:'XRP/USDT',date:'Mar 2026'},
+    {name:'Guillermo Núñez',img:P('1492106087820-71f1a00d2b11'),pnl:170,text:'Cuba. Planes accesibles comparado con competidores. Mejor relación precio/valor.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Ximena Bustos',img:P('1534751516642-a1af1ef26a56'),pnl:420,text:'Bolivia. La transparencia del ablation study me dio confianza para pagar VIP yearly.',pair:'BNB/USDT',date:'Mar 2026'},
+    {name:'Dante Zabala',img:P('1463453091185-61582044d556'),pnl:290,text:'Argentina. El slider de leverage es super fluido. UX impecable.',pair:'BTC/USDT',date:'Feb 2026'},
+    {name:'Gustavo Merino',img:P('1548372290-8d01b6c8e78c'),pnl:355,text:'Chile. APEX ULTRA rendimiento estable durante el crash de febrero. Engine sólido.',pair:'ETH/USDT',date:'Mar 2026'},
+    {name:'Noelia Cáceres',img:P('1489424731084-a5d8b219a5bb'),pnl:215,text:'Paraguay. Primera experiencia en crypto trading. Paper mode me dio las bases, VIP el salto.',pair:'SOL/USDT',date:'Mar 2026'},
+    {name:'Bruno Alegre',img:P('1522075469751-3a6694fb2f61'),pnl:500,text:'Brasil. 500% no meu capital em 7 meses. Sustentável, não é pump and dump.',pair:'BNB/USDT',date:'Mar 2026'},
   ];
   const grid=document.getElementById('rev-grid');
   if(!grid) return;

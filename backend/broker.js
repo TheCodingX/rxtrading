@@ -61,7 +61,7 @@ function signQuery(params, secret) {
   return query + '&signature=' + signature;
 }
 
-function binanceRequest(method, path, params, apiKey, apiSecret, isSigned = true) {
+function _binanceRequestOnce(method, path, params, apiKey, apiSecret, isSigned = true) {
   return new Promise((resolve, reject) => {
     let query = '';
     if (isSigned) {
@@ -91,20 +91,46 @@ function binanceRequest(method, path, params, apiKey, apiSecret, isSigned = true
         try {
           const parsed = JSON.parse(data);
           if (res.statusCode >= 400) {
-            reject(new Error(parsed.msg || `Binance error ${res.statusCode}`));
+            const err = new Error(parsed.msg || `Binance error ${res.statusCode}`);
+            err.statusCode = res.statusCode;
+            err.binanceCode = parsed.code;
+            reject(err);
           } else {
             resolve(parsed);
           }
         } catch (e) {
-          reject(new Error('Binance response parse error: ' + data.substring(0, 200)));
+          const err = new Error('Binance response parse error: ' + data.substring(0, 200));
+          err.statusCode = res.statusCode;
+          reject(err);
         }
       });
     });
 
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('Binance request timeout')); });
+    req.on('error', (e) => { e.isNetworkError = true; reject(e); });
+    req.on('timeout', () => { req.destroy(); const e = new Error('Binance request timeout'); e.isTimeout = true; reject(e); });
     req.end();
   });
+}
+
+// Wrapper with exponential backoff retry for transient errors (429, 503, timeouts)
+async function binanceRequest(method, path, params, apiKey, apiSecret, isSigned = true, maxRetries = 3) {
+  let lastErr = null;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await _binanceRequestOnce(method, path, params, apiKey, apiSecret, isSigned);
+    } catch (err) {
+      lastErr = err;
+      const isTransient = err.statusCode === 429 || err.statusCode === 418 || err.statusCode === 503 || err.isTimeout || err.isNetworkError;
+      // 4xx client errors (except 429/418) should fail fast
+      if (!isTransient) throw err;
+      if (attempt === maxRetries - 1) break;
+      // Exponential backoff: 500ms, 1.5s, 4s
+      const delay = Math.min(4000, 500 * Math.pow(3, attempt));
+      console.warn(`[Binance] Transient error (${err.statusCode || err.message}), retry ${attempt+1}/${maxRetries} in ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
 }
 
 // ═══ HIGH-LEVEL API FUNCTIONS ═══
@@ -148,19 +174,50 @@ async function setLeverage(apiKey, apiSecret, symbol, leverage) {
   }, apiKey, apiSecret, true);
 }
 
-async function getSymbolInfo(symbol) {
-  // Public endpoint — no auth needed
+// Cache exchangeInfo for 10 min to avoid hammering Binance
+let _exchangeInfoCache = null;
+let _exchangeInfoCacheAt = 0;
+async function getExchangeInfoCached() {
+  const now = Date.now();
+  if (_exchangeInfoCache && (now - _exchangeInfoCacheAt) < 10 * 60 * 1000) return _exchangeInfoCache;
   const info = await binanceRequest('GET', '/fapi/v1/exchangeInfo', {}, 'public', 'public', false);
+  _exchangeInfoCache = info;
+  _exchangeInfoCacheAt = now;
+  return info;
+}
+
+// Validate that a set of symbols is actually tradeable on Binance mainnet/testnet
+async function validatePairs(symbols) {
+  try {
+    const info = await getExchangeInfoCached();
+    const tradeable = new Set(info.symbols.filter(s => s.status === 'TRADING' && s.contractType === 'PERPETUAL').map(s => s.symbol));
+    const valid = [];
+    const invalid = [];
+    for (const sym of symbols) {
+      if (tradeable.has(sym.toUpperCase())) valid.push(sym);
+      else invalid.push(sym);
+    }
+    return { valid, invalid, totalTradeable: tradeable.size };
+  } catch (e) {
+    return { valid: symbols, invalid: [], error: e.message };
+  }
+}
+
+async function getSymbolInfo(symbol) {
+  const info = await getExchangeInfoCached();
   const sym = info.symbols.find(s => s.symbol === symbol.toUpperCase());
-  if (!sym) throw new Error('Symbol not found: ' + symbol);
+  if (!sym) throw new Error('Symbol not found or not tradeable on current Binance host: ' + symbol);
+  if (sym.status !== 'TRADING') throw new Error(`Symbol ${symbol} is not in TRADING state (status: ${sym.status})`);
   const lotFilter = sym.filters.find(f => f.filterType === 'LOT_SIZE');
   const priceFilter = sym.filters.find(f => f.filterType === 'PRICE_FILTER');
+  const minNotionalFilter = sym.filters.find(f => f.filterType === 'MIN_NOTIONAL');
   return {
     symbol: sym.symbol,
     stepSize: parseFloat(lotFilter.stepSize),
     minQty: parseFloat(lotFilter.minQty),
     maxQty: parseFloat(lotFilter.maxQty),
     tickSize: parseFloat(priceFilter.tickSize),
+    minNotional: minNotionalFilter ? parseFloat(minNotionalFilter.notional) : 5,
     quantityPrecision: sym.quantityPrecision,
     pricePrecision: sym.pricePrecision
   };
@@ -189,8 +246,23 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
 
   const symbolInfo = await getSymbolInfo(symbol);
 
-  // Set leverage first (non-fatal if already set)
-  try { await setLeverage(apiKey, apiSecret, symbol, leverage); } catch (e) {}
+  // Set leverage — BLOCKING: fail trade if can't set (prevents 5x under-exposure)
+  try {
+    await setLeverage(apiKey, apiSecret, symbol, leverage);
+  } catch (e) {
+    // Binance returns code -4046 if leverage is already set to that value (OK)
+    if (e.binanceCode !== -4046 && !String(e.message || '').includes('No need to change leverage')) {
+      throw new Error(`Cannot set leverage ${leverage}x on ${symbol}: ${e.message}. Trade aborted for safety.`);
+    }
+  }
+
+  // Detect position mode (One-Way vs Hedge) for correct positionSide param
+  let positionMode = 'one-way';
+  try {
+    const account = await binanceRequest('GET', '/fapi/v2/account', {}, apiKey, apiSecret, true, 2);
+    if (account.dualSidePosition === true) positionMode = 'hedge';
+  } catch(e) { /* default to one-way if check fails */ }
+  const positionSide = positionMode === 'hedge' ? (side === 'BUY' ? 'LONG' : 'SHORT') : undefined;
 
   // Calculate quantity: usdAmount * leverage / price
   const notional = usdAmount * leverage;
@@ -198,26 +270,71 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   let quantity = roundToStep(rawQty, symbolInfo.stepSize);
 
   if (quantity < symbolInfo.minQty) {
-    throw new Error(`Position too small for ${symbol}. Minimum: ${symbolInfo.minQty}`);
+    throw new Error(`Position too small for ${symbol}. Minimum qty: ${symbolInfo.minQty}`);
   }
   // Cap quantity to maxQty (testnet has lower limits than production)
   if (symbolInfo.maxQty && quantity > symbolInfo.maxQty) {
     console.log(`[Broker] ${symbol}: qty ${quantity} > maxQty ${symbolInfo.maxQty}, capping to max`);
     quantity = roundToStep(symbolInfo.maxQty, symbolInfo.stepSize);
   }
+  // CRITICAL: Validate minNotional (Binance rejects orders below this)
+  const notionalValue = quantity * currentPrice;
+  if (symbolInfo.minNotional && notionalValue < symbolInfo.minNotional) {
+    throw new Error(`Notional too small for ${symbol}. Minimum: $${symbolInfo.minNotional} (got $${notionalValue.toFixed(2)})`);
+  }
+  // CRITICAL: Validate TP/SL direction vs side to prevent Binance rejection
+  //   BUY:  entry ~currentPrice, TP > entry, SL < entry
+  //   SELL: entry ~currentPrice, TP < entry, SL > entry
+  if (side === 'BUY') {
+    if (tp <= currentPrice) throw new Error(`Invalid TP for BUY: TP ($${tp}) must be above current price ($${currentPrice})`);
+    if (sl >= currentPrice) throw new Error(`Invalid SL for BUY: SL ($${sl}) must be below current price ($${currentPrice})`);
+  } else { // SELL
+    if (tp >= currentPrice) throw new Error(`Invalid TP for SELL: TP ($${tp}) must be below current price ($${currentPrice})`);
+    if (sl <= currentPrice) throw new Error(`Invalid SL for SELL: SL ($${sl}) must be above current price ($${currentPrice})`);
+  }
+  // Sanity check: reasonable SL distance (prevent SL too close = instant stop, or too far = huge loss)
+  const slPct = Math.abs(sl - currentPrice) / currentPrice;
+  if (slPct > 0.25) throw new Error(`SL distance too large (${(slPct*100).toFixed(1)}% > 25% cap)`);
+  if (slPct < 0.001) throw new Error(`SL distance too small (${(slPct*100).toFixed(3)}% < 0.1% min)`);
 
   const closeSide = side === 'BUY' ? 'SELL' : 'BUY';
 
   // 1. Entry market order FIRST — get the ACTUAL fill price
-  const entryOrder = await binanceRequest('POST', '/fapi/v1/order', {
+  const entryParams = {
     symbol: symbol.toUpperCase(),
     side,
     type: 'MARKET',
-    quantity
-  }, apiKey, apiSecret, true);
+    quantity,
+    ...(positionSide && { positionSide })
+  };
+  const entryOrder = await binanceRequest('POST', '/fapi/v1/order', entryParams, apiKey, apiSecret, true);
 
-  // Get actual fill price from the entry order
-  const actualEntry = parseFloat(entryOrder.avgPrice) || currentPrice;
+  // Validate entry order filled correctly before placing TP/SL
+  if (entryOrder.status && !['FILLED', 'NEW'].includes(entryOrder.status)) {
+    throw new Error(`Entry order not filled properly: status=${entryOrder.status}. Refusing to place TP/SL.`);
+  }
+  // Get actual fill price — prefer avgPrice, fallback to price from executedQty calc, finally currentPrice
+  let actualEntry = parseFloat(entryOrder.avgPrice);
+  if (!actualEntry && entryOrder.executedQty && entryOrder.cumQuote) {
+    actualEntry = parseFloat(entryOrder.cumQuote) / parseFloat(entryOrder.executedQty);
+  }
+  if (!actualEntry) actualEntry = currentPrice;
+  // Sanity: if slippage >5% between signal and actual, abort (market likely illiquid or dumped)
+  const slippagePct = Math.abs(actualEntry - currentPrice) / currentPrice;
+  if (slippagePct > 0.05) {
+    // Emergency close the position
+    try {
+      await binanceRequest('POST', '/fapi/v1/order', {
+        symbol: symbol.toUpperCase(),
+        side: closeSide,
+        type: 'MARKET',
+        quantity,
+        reduceOnly: 'true',
+        ...(positionSide && { positionSide })
+      }, apiKey, apiSecret, true, 2);
+    } catch(e) {}
+    throw new Error(`Excessive slippage ${(slippagePct*100).toFixed(2)}% — position closed for safety`);
+  }
 
   // ═══ CRITICAL FIX: Recalculate TP/SL relative to ACTUAL entry price ═══
   // This preserves the R:R regardless of entry delay/slippage
@@ -237,7 +354,26 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   const tpPrice = roundToTick(adjustedTP, symbolInfo.tickSize);
   const slPrice = roundToTick(adjustedSL, symbolInfo.tickSize);
 
-  console.log(`[Broker] ${symbol} ${side}: signal@${currentPrice} → actual@${actualEntry} | TP: ${tp}→${tpPrice} | SL: ${sl}→${slPrice} | R:R preserved`);
+  // Validate against PRICE_FILTER (Binance rejects prices outside minPrice/maxPrice range)
+  const info = await getExchangeInfoCached();
+  const symObj = info.symbols.find(s => s.symbol === symbol.toUpperCase());
+  const priceFilter = symObj && symObj.filters.find(f => f.filterType === 'PRICE_FILTER');
+  if (priceFilter) {
+    const minP = parseFloat(priceFilter.minPrice);
+    const maxP = parseFloat(priceFilter.maxPrice);
+    if (minP > 0 && (tpPrice < minP || tpPrice > maxP || slPrice < minP || slPrice > maxP)) {
+      // Emergency close entry if TP/SL out of range
+      try {
+        await binanceRequest('POST', '/fapi/v1/order', {
+          symbol: symbol.toUpperCase(), side: closeSide, type: 'MARKET', quantity, reduceOnly: 'true',
+          ...(positionSide && { positionSide })
+        }, apiKey, apiSecret, true, 2);
+      } catch(e){}
+      throw new Error(`TP/SL price out of PRICE_FILTER range [${minP}, ${maxP}] — position closed for safety`);
+    }
+  }
+
+  console.log(`[Broker] ${symbol} ${side}${positionMode==='hedge'?' ['+positionSide+']':''}: signal@${currentPrice} → actual@${actualEntry} | TP: ${tp}→${tpPrice} | SL: ${sl}→${slPrice} | R:R preserved`);
 
   const result = {
     entry: entryOrder,
@@ -251,35 +387,101 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
     side
   };
 
-  // 2. Take Profit (reduce-only stop-market) — uses ADJUSTED price
-  // FIX: Use CONTRACT_PRICE (last trade price) instead of MARK_PRICE
-  // MARK_PRICE diverges from the actual trading price and causes premature SL hits
+  // 2. Take Profit — use TAKE_PROFIT_MARKET with reduceOnly + quantity (Binance Futures standard)
+  // NOTE: closePosition:'true' is NOT supported on all endpoints (causes "Order type not supported")
+  // Using reduceOnly+quantity works reliably on both testnet and mainnet
   try {
     result.tp = await binanceRequest('POST', '/fapi/v1/order', {
       symbol: symbol.toUpperCase(),
       side: closeSide,
       type: 'TAKE_PROFIT_MARKET',
       stopPrice: tpPrice,
-      closePosition: 'true',
-      workingType: 'CONTRACT_PRICE'
+      quantity,
+      reduceOnly: 'true',
+      workingType: 'CONTRACT_PRICE',
+      priceProtect: 'true',
+      ...(positionSide && { positionSide })
     }, apiKey, apiSecret, true);
   } catch (e) {
-    result.tpError = e.message;
+    // Fallback: TAKE_PROFIT limit order with explicit quantity
+    try {
+      result.tp = await binanceRequest('POST', '/fapi/v1/order', {
+        symbol: symbol.toUpperCase(),
+        side: closeSide,
+        type: 'TAKE_PROFIT',
+        stopPrice: tpPrice,
+        price: tpPrice,
+        quantity,
+        reduceOnly: 'true',
+        timeInForce: 'GTC',
+        workingType: 'CONTRACT_PRICE',
+        ...(positionSide && { positionSide })
+      }, apiKey, apiSecret, true);
+    } catch (e2) {
+      result.tpError = e2.message;
+      console.error(`[Broker] TP failed for ${symbol}:`, e.message, '| Fallback:', e2.message);
+    }
   }
 
-  // 3. Stop Loss (reduce-only stop-market) — uses ADJUSTED price
-  // FIX: Use CONTRACT_PRICE to match actual trading price (not mark price)
+  // 3. Stop Loss — use STOP_MARKET with reduceOnly + quantity (Binance Futures standard)
   try {
     result.sl = await binanceRequest('POST', '/fapi/v1/order', {
       symbol: symbol.toUpperCase(),
       side: closeSide,
       type: 'STOP_MARKET',
       stopPrice: slPrice,
-      closePosition: 'true',
-      workingType: 'CONTRACT_PRICE'
+      quantity,
+      reduceOnly: 'true',
+      workingType: 'CONTRACT_PRICE',
+      priceProtect: 'true',
+      ...(positionSide && { positionSide })
     }, apiKey, apiSecret, true);
   } catch (e) {
-    result.slError = e.message;
+    // Fallback: STOP limit order with explicit quantity
+    try {
+      result.sl = await binanceRequest('POST', '/fapi/v1/order', {
+        symbol: symbol.toUpperCase(),
+        side: closeSide,
+        type: 'STOP',
+        stopPrice: slPrice,
+        price: slPrice,
+        quantity,
+        reduceOnly: 'true',
+        timeInForce: 'GTC',
+        workingType: 'CONTRACT_PRICE',
+        ...(positionSide && { positionSide })
+      }, apiKey, apiSecret, true);
+    } catch (e2) {
+      result.slError = e2.message;
+      console.error(`[Broker] SL failed for ${symbol}:`, e.message, '| Fallback:', e2.message);
+      // CRITICAL: SL failed — cancel all orders + close position to avoid unprotected exposure
+      // With retry logic: try cancel + market close up to 3 times each
+      let emergencyAttempts = 0;
+      const emergencyErrors = [];
+      while (emergencyAttempts < 3 && !result.emergencyClosed) {
+        emergencyAttempts++;
+        try {
+          await binanceRequest('DELETE', '/fapi/v1/allOpenOrders', { symbol: symbol.toUpperCase() }, apiKey, apiSecret, true, 2);
+          await binanceRequest('POST', '/fapi/v1/order', {
+            symbol: symbol.toUpperCase(),
+            side: closeSide,
+            type: 'MARKET',
+            quantity,
+            reduceOnly: 'true'
+          }, apiKey, apiSecret, true, 2);
+          result.emergencyClosed = true;
+          result.emergencyCloseAttempts = emergencyAttempts;
+          console.warn(`[Broker] EMERGENCY close succeeded on attempt ${emergencyAttempts} for ${symbol}`);
+        } catch (e3) {
+          emergencyErrors.push(e3.message);
+          if (emergencyAttempts < 3) await new Promise(r => setTimeout(r, 1000 * emergencyAttempts));
+        }
+      }
+      if (!result.emergencyClosed) {
+        result.emergencyCloseError = emergencyErrors.join(' | ');
+        console.error(`[Broker] CRITICAL: emergency close FAILED for ${symbol} after 3 attempts:`, emergencyErrors);
+      }
+    }
   }
 
   return result;
@@ -315,16 +517,64 @@ async function closePosition(apiKey, apiSecret, symbol) {
 async function closeAllPositions(apiKey, apiSecret) {
   const account = await binanceRequest('GET', '/fapi/v2/account', {}, apiKey, apiSecret, true);
   const open = account.positions.filter(p => parseFloat(p.positionAmt) !== 0);
-  const results = [];
-  for (const pos of open) {
+  // PARALLEL closure for fast panic response — critical in crash scenarios
+  // Sort by absolute unrealized loss desc (close biggest losers first)
+  open.sort((a, b) => parseFloat(a.unRealizedProfit) - parseFloat(b.unRealizedProfit));
+  const results = await Promise.all(open.map(async (pos) => {
     try {
-      const r = await closePosition(apiKey, apiSecret, pos.symbol);
-      results.push({ symbol: pos.symbol, ok: true, order: r });
+      // Timeout per position: 5s max
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Close timeout 5s')), 5000));
+      const closePromise = closePosition(apiKey, apiSecret, pos.symbol);
+      const r = await Promise.race([closePromise, timeoutPromise]);
+      return { symbol: pos.symbol, ok: true, order: r };
     } catch (e) {
-      results.push({ symbol: pos.symbol, ok: false, error: e.message });
+      return { symbol: pos.symbol, ok: false, error: e.message };
     }
-  }
+  }));
   return results;
+}
+
+// listenKey management for userDataStream (real-time balance/position/order push)
+async function revokeListenKey(apiKey) {
+  const BINANCE_HOST = process.env.BINANCE_TESTNET === 'true' ? 'testnet.binancefuture.com' : 'fapi.binance.com';
+  const https = require('https');
+  return new Promise((resolve) => {
+    const req = https.request({ host: BINANCE_HOST, path: '/fapi/v1/listenKey', method: 'DELETE', headers: { 'X-MBX-APIKEY': apiKey } }, (res) => {
+      res.on('data', () => {});
+      res.on('end', () => resolve(true));
+    });
+    req.on('error', () => resolve(false));
+    req.end();
+  });
+}
+async function createListenKey(apiKey) {
+  // Revoke any existing listenKey first (prevents accumulating keys in Binance)
+  try { await revokeListenKey(apiKey); } catch(e) { /* best-effort */ }
+  const BINANCE_HOST = process.env.BINANCE_TESTNET === 'true' ? 'testnet.binancefuture.com' : 'fapi.binance.com';
+  const https = require('https');
+  return new Promise((resolve, reject) => {
+    const req = https.request({ host: BINANCE_HOST, path: '/fapi/v1/listenKey', method: 'POST', headers: { 'X-MBX-APIKEY': apiKey } }, (res) => {
+      let data = ''; res.on('data', (c) => data += c);
+      res.on('end', () => { try { const j = JSON.parse(data); if (j.listenKey) resolve(j.listenKey); else reject(new Error(j.msg || 'no listenKey')); } catch (e) { reject(e); } });
+    });
+    req.on('error', reject); req.end();
+  });
+}
+async function keepAliveListenKey(apiKey) {
+  const BINANCE_HOST = process.env.BINANCE_TESTNET === 'true' ? 'testnet.binancefuture.com' : 'fapi.binance.com';
+  const https = require('https');
+  return new Promise((resolve, reject) => {
+    const req = https.request({ host: BINANCE_HOST, path: '/fapi/v1/listenKey', method: 'PUT', headers: { 'X-MBX-APIKEY': apiKey }, timeout: 10000 }, (res) => {
+      let data = ''; res.on('data', (c) => data += c);
+      res.on('end', () => {
+        if (res.statusCode >= 400) reject(new Error(`keepAlive HTTP ${res.statusCode}`));
+        else resolve(true);
+      });
+    });
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('keepAlive timeout')); });
+    req.end();
+  });
 }
 
 module.exports = {
@@ -333,9 +583,14 @@ module.exports = {
   decrypt,
   testConnection,
   getAccountInfo,
+  getExchangeInfoCached,
+  validatePairs,
   setLeverage,
   placeTradeWithTPSL,
   cancelAllOrders,
   closePosition,
-  closeAllPositions
+  closeAllPositions,
+  createListenKey,
+  keepAliveListenKey,
+  revokeListenKey
 };

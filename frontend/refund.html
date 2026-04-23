@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Política de Reembolsos — RX PRO</title>
+<meta name="description" content="Política de reembolsos de RX PRO. Garantía 7 días, condiciones, procedimiento.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Rajdhani',sans-serif;background:#010806;color:#c8f0d4;line-height:1.6;padding:60px 24px;}
+.container{max-width:800px;margin:0 auto;}
+h1{font-family:'Orbitron',monospace;font-size:32px;font-weight:900;color:#FFD700;text-shadow:0 0 15px rgba(255,215,0,.4);margin-bottom:8px;letter-spacing:2px;}
+.subtitle{font-size:13px;color:rgba(255,215,0,.55);letter-spacing:1.5px;margin-bottom:32px;font-family:'JetBrains Mono',monospace;}
+h2{font-family:'Orbitron',monospace;font-size:16px;color:#00ff41;margin:28px 0 10px;letter-spacing:1.5px;text-transform:uppercase;}
+p{margin-bottom:10px;font-size:15px;}
+ul{margin:10px 0 14px 20px;}
+li{margin-bottom:6px;font-size:14px;}
+.tier{padding:18px;background:rgba(0,255,65,.04);border:1px solid rgba(0,255,65,.25);border-radius:10px;margin:14px 0;}
+.tier.full{border-color:rgba(0,255,65,.5);background:rgba(0,255,65,.08);}
+.tier.partial{border-color:rgba(255,215,0,.5);background:rgba(255,215,0,.06);}
+.tier.none{border-color:rgba(255,58,58,.4);background:rgba(255,58,58,.05);}
+.tier-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:900;letter-spacing:1.5px;margin-bottom:6px;}
+.tier.full .tier-title{color:#00ff41;}
+.tier.partial .tier-title{color:#FFD700;}
+.tier.none .tier-title{color:#ff7a7a;}
+a{color:#00ff41;text-decoration:none;border-bottom:1px dotted rgba(0,255,65,.4);}
+a:hover{color:#FFD700;}
+.back{display:inline-block;margin-top:40px;padding:10px 20px;background:rgba(0,255,65,.08);border:1px solid rgba(0,255,65,.35);color:#00ff41;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;border-radius:6px;}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Política de Reembolsos</h1>
+<div class="subtitle">Última actualización: 2026-04-22</div>
+
+<p>Queremos que estés satisfecho con RX PRO. Si el servicio no cumple tus expectativas, ofrecemos reembolsos según las condiciones abajo. Por favor, leé cuidadosamente.</p>
+
+<h2>1. Ventanas de reembolso</h2>
+
+<div class="tier full">
+<div class="tier-title">🟢 0-7 días: Reembolso 100%</div>
+<p>Si compraste VIP y <strong>NO ejecutaste ningún trade real con broker conectado</strong>, te reembolsamos el monto total. Aplica a todos los planes (7d / 1m / 3m / 1y).</p>
+<p><strong>Condición:</strong> Sin trades reales ejecutados vía /api/broker/place-order. Paper trading no cuenta como trade real.</p>
+</div>
+
+<div class="tier partial">
+<div class="tier-title">🟡 7-30 días: Reembolso parcial 50%</div>
+<p>Si ejecutaste entre 1 y 5 trades reales, te reembolsamos 50% del monto pagado.</p>
+<p><strong>Condición:</strong> Menos de 5 trades reales ejecutados. Si ejecutaste 6 o más, no aplica reembolso porque usaste activamente el servicio.</p>
+</div>
+
+<div class="tier none">
+<div class="tier-title">🔴 Después de 30 días: Sin reembolso</div>
+<p>Después de 30 días desde la compra, no se otorgan reembolsos. Podés cancelar la renovación automática (si aplica) desde Settings.</p>
+</div>
+
+<h2>2. Causas válidas para reembolso total fuera de ventana</h2>
+<p>Excepcionalmente, otorgamos reembolso total si:</p>
+<ul>
+<li><strong>Downtime prolongado</strong>: el servicio estuvo caído más de 48 horas consecutivas (comprobado por monitoreo externo)</li>
+<li><strong>Bug crítico del motor</strong>: si un bug nuestro causó pérdidas medibles en tu cuenta (se analiza caso por caso con logs)</li>
+<li><strong>Error de facturación</strong>: cobro duplicado, monto incorrecto</li>
+<li><strong>Fraude</strong>: cargo no autorizado en tu tarjeta (acreditar con denuncia al banco)</li>
+</ul>
+
+<h2>3. Procedimiento para solicitar reembolso</h2>
+<ol>
+<li>Enviá email a <a href="mailto:refunds@rxtrading.net">refunds@rxtrading.net</a> con:
+  <ul>
+  <li>Tu código VIP (RX-VIP-XXXX)</li>
+  <li>Email usado en la compra</li>
+  <li>Fecha de compra</li>
+  <li>Método de pago (Stripe / MercadoPago / Crypto)</li>
+  <li>Motivo del reembolso</li>
+  </ul>
+</li>
+<li>Respondemos en máximo <strong>72 horas hábiles</strong>.</li>
+<li>Si aprobado, procesamos el reembolso vía el método de pago original.</li>
+<li>Tiempo de acreditación: 5-10 días hábiles (varía por banco / procesador).</li>
+</ol>
+
+<h2>4. Lo que NO califica para reembolso</h2>
+<ul>
+<li>Pérdidas de trading (mercado en contra, stop loss hit, liquidación por apalancamiento) — son riesgos inherentes del trading</li>
+<li>Cambio de opinión después de 30 días</li>
+<li>No estás conforme con la frecuencia de señales (son 5-8 por día según backtest — si es muy pocas o muchas, eso es el producto)</li>
+<li>Errores propios al configurar Binance (keys incorrectas, withdraw permission activado, etc.)</li>
+<li>Insuficiente capital: recomendamos $1,000 USD mínimo. Operar con menos es tu riesgo</li>
+<li>Operaste por menos del horizonte mínimo recomendado (6 meses) y esperabas ganancias inmediatas</li>
+<li>Compartiste tu código con terceros (causal de revocación sin reembolso)</li>
+<li>Violaste los <a href="/terms.html">Términos de Servicio</a></li>
+</ul>
+
+<h2>5. Disputas (chargebacks)</h2>
+<p>Antes de iniciar un chargeback con tu banco, contactanos. En 95% de los casos resolvemos disputas amistosamente. Chargebacks fraudulentos resultarán en:</p>
+<ul>
+<li>Revocación inmediata de tu código VIP</li>
+<li>Blacklist permanente del email y fingerprint del dispositivo</li>
+<li>Reporte al procesador de pago (Stripe Radar)</li>
+</ul>
+
+<h2>6. Reembolsos en cryptocurrency</h2>
+<p>Si pagaste con USDT u otras cryptos vía NOWPayments:</p>
+<ul>
+<li>Reembolsos se hacen a la misma wallet de origen (si es posible)</li>
+<li>Si la wallet de origen no puede recibir, proporcionanos una wallet nueva de la misma red (ERC20)</li>
+<li>El monto se reembolsa en USD-equivalente al precio spot del momento de la compra (no volatilidad del crypto)</li>
+<li>Gas fees de la red se descuentan del monto</li>
+</ul>
+
+<h2>7. Contacto</h2>
+<ul>
+<li>Reembolsos: <a href="mailto:refunds@rxtrading.net">refunds@rxtrading.net</a></li>
+<li>Soporte general: <a href="mailto:support@rxtrading.net">support@rxtrading.net</a></li>
+<li>Legal: <a href="mailto:legal@rxtrading.net">legal@rxtrading.net</a></li>
+</ul>
+
+<p style="margin-top:40px;font-size:12px;color:rgba(200,240,212,.5);">Documentos relacionados: <a href="/terms.html">Términos</a> · <a href="/privacy.html">Privacidad</a> · <a href="/cookies.html">Cookies</a></p>
+
+<a href="/" class="back">← Volver al inicio</a>
+</div>
+</body>
+</html>

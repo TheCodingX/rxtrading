@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Política de Privacidad — RX PRO</title>
+<meta name="description" content="Política de Privacidad de RX PRO. Datos recolectados, propósito, retención, derechos del usuario.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Rajdhani',sans-serif;background:#010806;color:#c8f0d4;line-height:1.6;padding:60px 24px;}
+.container{max-width:800px;margin:0 auto;}
+h1{font-family:'Orbitron',monospace;font-size:32px;font-weight:900;color:#FFD700;text-shadow:0 0 15px rgba(255,215,0,.4);margin-bottom:8px;letter-spacing:2px;}
+.subtitle{font-size:13px;color:rgba(255,215,0,.55);letter-spacing:1.5px;margin-bottom:32px;font-family:'JetBrains Mono',monospace;}
+h2{font-family:'Orbitron',monospace;font-size:16px;color:#00ff41;margin:28px 0 10px;letter-spacing:1.5px;text-transform:uppercase;}
+h3{font-size:15px;color:#FFD700;margin:16px 0 6px;font-weight:700;}
+p{margin-bottom:10px;font-size:15px;color:#c8f0d4;}
+ul{margin:10px 0 14px 20px;}
+li{margin-bottom:4px;font-size:14px;}
+.muted{color:rgba(200,240,212,.55);font-size:13px;}
+a{color:#00ff41;text-decoration:none;border-bottom:1px dotted rgba(0,255,65,.4);}
+a:hover{color:#FFD700;border-bottom-color:rgba(255,215,0,.6);}
+.back{display:inline-block;margin-top:40px;padding:10px 20px;background:rgba(0,255,65,.08);border:1px solid rgba(0,255,65,.35);color:#00ff41;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;border-radius:6px;}
+.meta{margin-top:40px;padding-top:20px;border-top:1px solid rgba(255,215,0,.15);font-size:12px;color:rgba(200,240,212,.5);}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Política de Privacidad</h1>
+<div class="subtitle">Última actualización: 2026-04-22 · Vigente desde 2026-04-22</div>
+
+<p>En RX PRO ("nosotros", "la plataforma", "el servicio") respetamos tu privacidad. Esta política describe qué datos recolectamos, cómo los usamos y tus derechos sobre ellos.</p>
+
+<h2>1. Datos que recolectamos</h2>
+
+<h3>1.1 Información de la cuenta</h3>
+<ul>
+<li>Email (opcional — solo si lo proporcionás para recibir la license key y soporte)</li>
+<li>Código de licencia VIP (código único generado al pagar)</li>
+<li>Hash del fingerprint del dispositivo (para prevenir multi-activación abusiva)</li>
+</ul>
+
+<h3>1.2 Información de trading (si conectás broker real)</h3>
+<ul>
+<li>API Keys de Binance Futures — <strong>encriptadas en reposo con AES-256-GCM</strong></li>
+<li>Historial de trades ejecutados (símbolo, lado, cantidad, PnL, timestamps)</li>
+<li>Balance de la cuenta en el momento de conexión</li>
+</ul>
+
+<h3>1.3 Información técnica</h3>
+<ul>
+<li>Dirección IP (anonimizada a /24 IPv4 o /64 IPv6 después de rate-limiting)</li>
+<li>User-Agent (para detectar cambio de dispositivo sospechoso)</li>
+<li>Cookies esenciales: token JWT de sesión, refresh token, preferencias UI</li>
+<li>Cookies de analytics (opcional, con tu consentimiento): Firebase Analytics</li>
+</ul>
+
+<h2>2. Propósito del uso</h2>
+<ul>
+<li><strong>Autenticación y autorización</strong>: validar que tu licencia VIP es válida y no está expirada/revocada</li>
+<li><strong>Ejecución de trades</strong>: cuando conectás Binance, usamos tus API keys para ejecutar órdenes en tu nombre (nunca para retirar fondos — el permiso de withdraw debe estar deshabilitado)</li>
+<li><strong>Soporte al cliente</strong>: tu email nos permite enviarte tu código, responder tickets y notificarte de cambios críticos</li>
+<li><strong>Mejora del producto</strong>: analytics agregados para entender uso (nunca individualizado)</li>
+<li><strong>Seguridad</strong>: detección de abuso, rate-limiting, audit log de acciones admin</li>
+</ul>
+
+<h2>3. Retención de datos</h2>
+<ul>
+<li><strong>License keys + configuración</strong>: durante la vigencia de tu suscripción + 90 días post-expiración</li>
+<li><strong>Historial de trades</strong>: 180 días rolling, después se elimina automáticamente</li>
+<li><strong>Audit logs</strong>: 90 días (requerido por auditoría interna)</li>
+<li><strong>API keys encriptadas</strong>: se eliminan permanentemente cuando desconectás el broker</li>
+<li><strong>Logs de servidor</strong>: 30 días (con IPs anonimizadas)</li>
+</ul>
+
+<h2>4. Compartición con terceros</h2>
+<p>No vendemos ni alquilamos tus datos personales. Compartimos datos mínimos con procesadores necesarios:</p>
+<ul>
+<li><strong>Stripe / MercadoPago / NOWPayments</strong>: procesadores de pago. Recibimos solo confirmación de pago, no los detalles de tu tarjeta</li>
+<li><strong>Binance</strong>: cuando vos mismo conectás tu cuenta. Las API keys viajan solo entre vos, nuestro backend y Binance</li>
+<li><strong>Supabase (PostgreSQL hosted)</strong>: nuestro proveedor de base de datos. Los datos están encriptados en tránsito (TLS) y en reposo</li>
+<li><strong>Render (hosting backend)</strong>: nuestro proveedor de compute. Procesa tus requests pero no persiste datos</li>
+<li><strong>Google Firebase</strong>: autenticación opcional Google Sign-In (si elegís esa opción) + analytics opt-in</li>
+</ul>
+
+<h2>5. Tus derechos (GDPR / LGPD / CCPA)</h2>
+<p>Tenés derecho a:</p>
+<ul>
+<li><strong>Acceso</strong>: obtener copia de tus datos escribiéndonos a soporte</li>
+<li><strong>Rectificación</strong>: pedir que corrijamos datos incorrectos</li>
+<li><strong>Eliminación ("derecho al olvido")</strong>: eliminar tu cuenta y datos asociados vía email</li>
+<li><strong>Portabilidad</strong>: exportar tus datos en formato JSON</li>
+<li><strong>Oposición</strong>: desactivar cookies de analytics sin afectar funcionalidad esencial</li>
+<li><strong>Revocación de consentimiento</strong>: gestionar cookies desde el banner en landing page</li>
+</ul>
+
+<h2>6. Seguridad</h2>
+<ul>
+<li>Encriptación en tránsito: TLS 1.2+ para toda comunicación</li>
+<li>Encriptación en reposo: AES-256-GCM para API keys de Binance</li>
+<li>Passwords nunca se almacenan en texto plano (usamos bcrypt con cost factor 12)</li>
+<li>JWT tokens con secret rotado regularmente</li>
+<li>Rate limiting en endpoints sensibles (auth, trading)</li>
+<li>Audit log de acciones administrativas</li>
+</ul>
+
+<h2>7. Menores de edad</h2>
+<p>El servicio no está disponible para menores de 18 años. Si descubrimos que hemos recolectado datos de un menor, los eliminaremos inmediatamente.</p>
+
+<h2>8. Transferencias internacionales</h2>
+<p>Los datos pueden procesarse en servidores fuera de tu país (Estados Unidos, Europa). Los proveedores que usamos cumplen estándares GDPR-compatibles.</p>
+
+<h2>9. Cambios a esta política</h2>
+<p>Podemos actualizar esta política. La versión vigente siempre estará en <a href="https://rxtrading.net/privacy.html">rxtrading.net/privacy.html</a>. Notificaremos cambios materiales por email a usuarios registrados con al menos 30 días de aviso.</p>
+
+<h2>10. Contacto</h2>
+<p>Para ejercer tus derechos, reportar incidentes o consultas generales sobre privacidad:</p>
+<ul>
+<li>Email de contacto: <a href="mailto:privacy@rxtrading.net">privacy@rxtrading.net</a></li>
+<li>Soporte general: <a href="mailto:support@rxtrading.net">support@rxtrading.net</a></li>
+</ul>
+
+<div class="meta">
+<p>Al usar RX PRO aceptás esta Política de Privacidad junto con nuestros <a href="/terms.html">Términos de Servicio</a> y <a href="/cookies.html">Política de Cookies</a>.</p>
+<p>© 2026 RX PRO. Todos los derechos reservados.</p>
+</div>
+
+<a href="/" class="back">← Volver al inicio</a>
+</div>
+</body>
+</html>

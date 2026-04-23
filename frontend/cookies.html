@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Política de Cookies — RX PRO</title>
+<meta name="description" content="Política de cookies de RX PRO. Tipos, duración, cómo deshabilitar.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Rajdhani',sans-serif;background:#010806;color:#c8f0d4;line-height:1.6;padding:60px 24px;}
+.container{max-width:800px;margin:0 auto;}
+h1{font-family:'Orbitron',monospace;font-size:32px;font-weight:900;color:#FFD700;text-shadow:0 0 15px rgba(255,215,0,.4);margin-bottom:8px;letter-spacing:2px;}
+.subtitle{font-size:13px;color:rgba(255,215,0,.55);letter-spacing:1.5px;margin-bottom:32px;font-family:'JetBrains Mono',monospace;}
+h2{font-family:'Orbitron',monospace;font-size:16px;color:#00ff41;margin:28px 0 10px;letter-spacing:1.5px;text-transform:uppercase;}
+p{margin-bottom:10px;font-size:15px;}
+ul{margin:10px 0 14px 20px;}
+li{margin-bottom:6px;font-size:14px;}
+table{width:100%;margin:16px 0;border-collapse:collapse;font-size:13px;}
+th,td{padding:8px 10px;text-align:left;border:1px solid rgba(255,215,0,.2);}
+th{background:rgba(255,215,0,.08);color:#FFD700;font-family:'Orbitron',monospace;font-size:11px;letter-spacing:1px;}
+tr:nth-child(even){background:rgba(0,255,65,.02);}
+a{color:#00ff41;text-decoration:none;border-bottom:1px dotted rgba(0,255,65,.4);}
+a:hover{color:#FFD700;border-bottom-color:rgba(255,215,0,.6);}
+button.manage{margin-top:16px;padding:12px 22px;background:linear-gradient(135deg,rgba(255,215,0,.15),rgba(255,138,0,.08));border:1px solid rgba(255,215,0,.55);color:#FFD700;font-family:'Orbitron',monospace;font-size:11px;font-weight:800;letter-spacing:2px;border-radius:8px;cursor:pointer;}
+button.manage:hover{background:linear-gradient(135deg,rgba(255,215,0,.25),rgba(255,138,0,.15));}
+.back{display:inline-block;margin-top:40px;padding:10px 20px;background:rgba(0,255,65,.08);border:1px solid rgba(0,255,65,.35);color:#00ff41;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;border-radius:6px;}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Política de Cookies</h1>
+<div class="subtitle">Última actualización: 2026-04-22</div>
+
+<p>RX PRO usa cookies y tecnologías similares (localStorage, sessionStorage) para operar correctamente y mejorar tu experiencia. Esta página explica qué cookies usamos, por qué, y cómo podés controlarlas.</p>
+
+<h2>1. Qué son las cookies</h2>
+<p>Las cookies son pequeños archivos de datos almacenados por tu navegador. LocalStorage y sessionStorage son mecanismos similares para guardar datos en el navegador. Usamos las tres técnicas.</p>
+
+<h2>2. Tipos de cookies que usamos</h2>
+
+<table>
+<thead>
+<tr><th>Tipo</th><th>Nombre</th><th>Propósito</th><th>Duración</th><th>Opt-out</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Esencial</strong></td><td>rxtrading_token_v1</td><td>JWT de sesión autenticada</td><td>Session (revoca al logout)</td><td>No (requerido)</td></tr>
+<tr><td><strong>Esencial</strong></td><td>rxtrading_vip_v55_p</td><td>Código VIP asociado a tu cuenta</td><td>Hasta expiración del plan</td><td>No (requerido)</td></tr>
+<tr><td><strong>Esencial</strong></td><td>rx_refresh</td><td>Refresh token (httpOnly)</td><td>7 días</td><td>No (requerido)</td></tr>
+<tr><td><strong>Funcional</strong></td><td>rx_paper_v2</td><td>Estado de paper trading (simulación)</td><td>Persistente en browser</td><td>Sí (clear browser data)</td></tr>
+<tr><td><strong>Funcional</strong></td><td>rx_cookie_consent</td><td>Tu elección de consentimiento</td><td>30 días</td><td>Sí (revocable)</td></tr>
+<tr><td><strong>Funcional</strong></td><td>rx_lang</td><td>Idioma elegido (es/en)</td><td>Persistente</td><td>Sí</td></tr>
+<tr><td><strong>Funcional</strong></td><td>rx_theme</td><td>Dark/Light mode</td><td>Persistente</td><td>Sí</td></tr>
+<tr><td>Analytics</td><td>Firebase Analytics (_ga, _gid)</td><td>Métricas de uso agregadas</td><td>2 años</td><td>Sí (desactivá banner)</td></tr>
+</tbody>
+</table>
+
+<h2>3. Cookies de terceros</h2>
+<ul>
+<li><strong>Stripe</strong>: cuando comprás VIP con tarjeta, Stripe pone sus propias cookies en checkout.stripe.com (fuera de nuestro dominio)</li>
+<li><strong>MercadoPago</strong>: similar para pagos en LATAM</li>
+<li><strong>Google Firebase</strong>: si aceptás analytics, Firebase pone cookies para tracking agregado (no individualizado)</li>
+</ul>
+<p>No compartimos tus datos personales con estos terceros más allá de lo estrictamente necesario para procesar pagos.</p>
+
+<h2>4. Base legal (GDPR)</h2>
+<ul>
+<li>Cookies <strong>esenciales</strong>: legítimo interés — requeridas para autenticación y funcionamiento</li>
+<li>Cookies <strong>funcionales</strong>: legítimo interés — mejoran UX pero no son obligatorias</li>
+<li>Cookies <strong>analytics</strong>: consentimiento explícito — solo activas si clickeás "Aceptar todas" en el banner</li>
+</ul>
+
+<h2>5. Cómo gestionar tus cookies</h2>
+<ul>
+<li><strong>Primera visita</strong>: el banner te pregunta "Solo esenciales" o "Aceptar todas"</li>
+<li><strong>Revocar consentimiento</strong>: click en "Gestionar cookies" en el footer → revoca analytics</li>
+<li><strong>Browser settings</strong>: podés deshabilitar cookies en la configuración de tu navegador (puede romper features esenciales como login)</li>
+<li><strong>Extensiones</strong>: uBlock Origin, Privacy Badger bloquean Firebase Analytics sin afectar funcionalidad core</li>
+</ul>
+
+<p><button class="manage" onclick="manageCookies()">⚙ Gestionar mis cookies</button></p>
+
+<h2>6. Cambios</h2>
+<p>Actualizaremos esta política si agregamos cookies nuevas. Revisá esta página periódicamente. Cambios materiales se notifican vía banner.</p>
+
+<h2>7. Contacto</h2>
+<p>Preguntas sobre cookies: <a href="mailto:privacy@rxtrading.net">privacy@rxtrading.net</a></p>
+
+<p style="margin-top:40px;font-size:12px;color:rgba(200,240,212,.5);">Documentos relacionados: <a href="/privacy.html">Privacidad</a> · <a href="/terms.html">Términos</a> · <a href="/refund.html">Reembolsos</a></p>
+
+<a href="/" class="back">← Volver al inicio</a>
+</div>
+<script>
+function manageCookies(){
+  const current = localStorage.getItem('rx_cookie_consent');
+  const choice = prompt('Gestionar consentimiento de cookies:\n\n1 = Solo esenciales (desactiva analytics)\n2 = Aceptar todas (habilita analytics)\n\nActual: ' + (current === 'all' ? 'Todas' : current === 'essential' ? 'Solo esenciales' : 'Sin elección previa') + '\n\nIngresá 1 o 2:', '1');
+  if(choice === '1'){
+    localStorage.setItem('rx_cookie_consent', 'essential');
+    localStorage.setItem('rx_cookie_consent_at', String(Date.now()));
+    alert('✓ Preferencia guardada: solo cookies esenciales. Analytics desactivado.');
+  } else if(choice === '2'){
+    localStorage.setItem('rx_cookie_consent', 'all');
+    localStorage.setItem('rx_cookie_consent_at', String(Date.now()));
+    alert('✓ Preferencia guardada: todas las cookies activadas.');
+  }
+}
+</script>
+</body>
+</html>
