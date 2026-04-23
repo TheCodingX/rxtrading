@@ -25,9 +25,12 @@ function _checkSecretEntropy(s) {
   if (!s || s.length < 32) return false;
   if (/^(.)\1+$/.test(s)) return false; // all same char
   if (/^(0{32}|1{32}|a{32}|A{32})/.test(s)) return false;
-  // Distinct chars ≥ 10 (prevents 'aaaaaaaa...' patterns)
-  const distinct = new Set(s.split('')).size;
-  return distinct >= 10;
+  // 2026-04-22 audit fix 1.3: tighten — min 16 distinct chars + no patterns
+  const chars = new Set(s);
+  if (chars.size < 16) return false;           // min 16 distinct chars
+  if (/(.)\1{3,}/.test(s)) return false;       // no 4+ repeats
+  if (/(.{2,})\1{2,}/.test(s)) return false;   // no substring patterns like 'abab abab abab'
+  return true;
 }
 if (!JWT_SECRET || JWT_SECRET.includes('CAMBIA_ESTO') || !_checkSecretEntropy(JWT_SECRET)) {
   console.error('\n[ERROR] JWT_SECRET debe tener mínimo 32 chars + entropy alta. Generá: openssl rand -hex 32\n');
@@ -156,13 +159,16 @@ app.use(helmet({
   hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
 }));
+// 2026-04-22 audit fix 1.5: CORS localhost only in non-production env
 app.use(cors({
   origin: function(origin, callback) {
     // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
     if (CORS_ORIGINS.includes(origin)) return callback(null, true);
-    // Dev: accept any localhost:* origin (covers 8090 preview, 5500, etc.)
-    if (/^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) return callback(null, true);
+    // Localhost only allowed in non-production
+    if (process.env.NODE_ENV !== 'production') {
+      if (/^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) return callback(null, true);
+    }
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true
@@ -236,6 +242,31 @@ const generalLimiter = rateLimit({
   message: { error: 'Demasiadas peticiones. Intenta en 15 minutos.' }
 });
 
+// v2.0 Enumeration defense: limit per (code + fingerprint) tuple, not just IP
+const _validateAttempts = new Map(); // key: code+fp, value: [timestamps]
+function validateAttemptGuard(req, res, next) {
+  try {
+    const code = (req.body?.code || '').replace(/\s/g, '').toUpperCase();
+    const fp = (req.body?.fingerprint || '').slice(0, 64);
+    if (code && fp) {
+      const key = code + '|' + fp;
+      const now = Date.now();
+      const cutoff = now - 15 * 60 * 1000;
+      const attempts = (_validateAttempts.get(key) || []).filter(t => t > cutoff);
+      if (attempts.length >= 5) {
+        return res.status(429).json({ error: 'Demasiados intentos para este código. Esperá 15 min.' });
+      }
+      attempts.push(now);
+      _validateAttempts.set(key, attempts);
+      // cleanup (simple: cap map at 10000 entries)
+      if (_validateAttempts.size > 10000) {
+        const firstKey = _validateAttempts.keys().next().value;
+        _validateAttempts.delete(firstKey);
+      }
+    }
+  } catch(e){}
+  next();
+}
 const validateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -243,6 +274,28 @@ const validateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Demasiados intentos de validación. Intenta en 15 minutos.' }
 });
+// v2.0 CSRF NOTE: API uses Bearer token in Authorization header (localStorage-sourced).
+// Cross-site POST can NOT forge Authorization header (browser won't attach it from cross-origin).
+// Refresh cookie (rx_refresh) is httpOnly + sameSite:'strict' — blocks cross-site cookie send.
+// Conclusion: CSRF is mitigated via architecture (Bearer-in-header auth + strict sameSite cookie).
+// Additional defense: Origin/Referer check on state-changing endpoints:
+function verifyOriginMiddleware(req, res, next) {
+  const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    'https://rxtrading.net',
+    'https://www.rxtrading.net',
+    'http://localhost:8090',
+    'http://localhost:3000'
+  ].filter(Boolean);
+  const origin = req.get('Origin') || req.get('Referer') || '';
+  if (!origin) return next(); // no origin = likely same-origin (allow)
+  const ok = allowedOrigins.some(a => origin.startsWith(a));
+  if (!ok) {
+    console.warn('[CSRF] Rejected origin:', origin, 'path:', req.path);
+    return res.status(403).json({ error: 'Origin not allowed' });
+  }
+  next();
+}
 
 const adminLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -280,6 +333,23 @@ const reconcileLimiter = rateLimit({
 function perUserKey(req) {
   return req.license?.keyId ? `user_${req.license.keyId}` : req.ip;
 }
+
+// 2026-04-22 audit fix 1.6 + 4.4: PII-safe log helper (mask keyId, emails, amounts)
+function safeLog(label, data) {
+  if (process.env.NODE_ENV === 'production' && process.env.LOG_VERBOSE !== 'true') {
+    // In prod, suppress verbose logs unless explicitly enabled
+    return;
+  }
+  try {
+    const masked = { ...data };
+    if (masked.keyId) masked.keyId = `key_${String(masked.keyId).slice(-4)}`;
+    if (masked.email) masked.email = String(masked.email).replace(/(.{2})(.*)(@.*)/, '$1***$3');
+    if (masked.amount !== undefined) masked.amount = typeof masked.amount === 'number' ? `$${Math.round(masked.amount/10)*10}` : '$XXX';
+    if (masked.apiKey) masked.apiKey = '***';
+    if (masked.apiSecret) masked.apiSecret = '***';
+    console.log(label, JSON.stringify(masked));
+  } catch (e) { /* silent */ }
+}
 const perUserSyncLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
@@ -287,6 +357,25 @@ const perUserSyncLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiadas sync requests — intenta en 1 minuto.' }
+});
+
+// 2026-04-22 audit fix 1.4: dedicated refresh token rate limiter (5/min per keyId or IP)
+const refreshTokenLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  keyGenerator: (req) => {
+    try {
+      const rt = req.cookies?.rx_refresh;
+      if (rt) {
+        const decoded = require('jsonwebtoken').decode(rt);
+        if (decoded?.keyId) return `refresh_${decoded.keyId}`;
+      }
+    } catch(e) {}
+    return req.ip;
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados refresh requests. Esperá 60 segundos.' }
 });
 
 app.use('/api/', generalLimiter);
@@ -404,7 +493,7 @@ async function generateVIPKeyForPayment(paymentId, planId, email, customerName) 
 // ════════════════════════════════════════════════════
 
 // POST /api/keys/validate — Validate a license key
-app.post('/api/keys/validate', validateLimiter, async (req, res) => {
+app.post('/api/keys/validate', validateLimiter, validateAttemptGuard, async (req, res) => {
   const { code, fingerprint } = req.body;
 
   if (!code || !fingerprint) {
@@ -451,12 +540,12 @@ app.post('/api/keys/validate', validateLimiter, async (req, res) => {
       const token = jwt.sign(
         { keyId: keyRow.id, code: cleanCode, name: keyRow.owner_name, fp: fingerprint, type: 'access' },
         JWT_SECRET,
-        { expiresIn: '7d' } // Shorter-lived access token
+        { expiresIn: '4h' } // v2.0 Shorter access token (was 7d); frontend auto-refreshes via rx_refresh cookie
       );
       const refreshToken = jwt.sign(
         { keyId: keyRow.id, fp: fingerprint, type: 'refresh' },
         JWT_SECRET,
-        { expiresIn: '90d' }
+        { expiresIn: '30d' } // v2.0 reduced from 90d
       );
       // Set refresh token as httpOnly cookie (cannot be read via XSS)
       try {
@@ -498,12 +587,12 @@ app.post('/api/keys/validate', validateLimiter, async (req, res) => {
     const token = jwt.sign(
       { keyId: keyRow.id, code: cleanCode, name: keyRow.owner_name, fp: fingerprint, type: 'access' },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '4h' }
     );
     const refreshToken = jwt.sign(
       { keyId: keyRow.id, fp: fingerprint, type: 'refresh' },
       JWT_SECRET,
-      { expiresIn: '90d' }
+      { expiresIn: '30d' }
     );
     try {
       res.cookie('rx_refresh', refreshToken, {
@@ -593,7 +682,8 @@ app.post('/api/keys/logout', verifyToken, async (req, res) => {
 });
 
 // POST /api/keys/refresh — rotate refresh token + issue fresh access token
-app.post('/api/keys/refresh', generalLimiter, async (req, res) => {
+// 2026-04-22 audit fix 1.4: dedicated refreshTokenLimiter (5/min per keyId)
+app.post('/api/keys/refresh', refreshTokenLimiter, async (req, res) => {
   const rt = req.cookies && req.cookies.rx_refresh;
   if (!rt) return res.status(401).json({ error: 'No refresh token' });
   try {
@@ -627,12 +717,12 @@ app.post('/api/keys/refresh', generalLimiter, async (req, res) => {
     const token = jwt.sign(
       { keyId: row.id, code: row.key_code, name: row.owner_name, fp: decoded.fp, type: 'access' },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '4h' }
     );
     const newRefreshToken = jwt.sign(
       { keyId: row.id, fp: decoded.fp, type: 'refresh', ver: newVer },
       JWT_SECRET,
-      { expiresIn: '90d' }
+      { expiresIn: '30d' }
     );
     res.cookie('rx_refresh', newRefreshToken, {
       httpOnly: true,
@@ -660,16 +750,21 @@ app.get(['/health', '/api/health'], async (req, res) => {
     ]);
     checks.db = r?.rows?.[0]?.ok === 1;
   } catch (e) { checks.db = false; }
-  const healthy = checks.db && checks.jwt; // broker_keys optional in dev
-  res.status(healthy ? 200 : 503).json({
+  const healthy = checks.db && checks.jwt;
+  // 2026-04-22 audit fix 4.3: hide mode/env from public — only expose to admin
+  const isAdmin = req.headers['x-admin-secret'] === ADMIN_SECRET && ADMIN_SECRET;
+  const payload = {
     ok: healthy,
     service: 'rxtrading-backend',
-    mode: process.env.BINANCE_TESTNET === 'true' ? 'testnet' : 'mainnet',
-    env: process.env.NODE_ENV || 'development',
     uptime: Math.round(process.uptime()),
-    checks,
     ts: new Date().toISOString()
-  });
+  };
+  if (isAdmin) {
+    payload.mode = process.env.BINANCE_TESTNET === 'true' ? 'testnet' : 'mainnet';
+    payload.env = process.env.NODE_ENV || 'development';
+    payload.checks = checks;
+  }
+  res.status(healthy ? 200 : 503).json(payload);
 });
 // Admin metrics endpoint (protected)
 app.get('/api/admin/metrics', verifyAdminSecret, (req, res) => {
@@ -692,6 +787,42 @@ app.get('/api/admin/metrics', verifyAdminSecret, (req, res) => {
     mode: process.env.BINANCE_TESTNET === 'true' ? 'testnet' : 'mainnet',
     ts: new Date().toISOString()
   });
+});
+
+// ════════════════════════════════════════════════════
+// 2026-04-22 audit fix 8.2: Admin emergency kill-switches
+// ════════════════════════════════════════════════════
+
+// POST /api/admin/autotrade/pause-all — Pause autotrade globally for all VIP users
+app.post('/api/admin/autotrade/pause-all', adminLimiter, verifyAdminSecret, async (req, res) => {
+  const { reason, durationHours } = req.body || {};
+  const pauseUntil = durationHours ? new Date(Date.now() + (parseInt(durationHours)||24) * 3600 * 1000) : null;
+  try {
+    const result = await pool.query(
+      `UPDATE broker_configs SET circuit_breaker_until = COALESCE($1, NOW() + INTERVAL '24 hours') WHERE connected = true`,
+      [pauseUntil]
+    );
+    if (typeof logAudit === 'function') {
+      try { await logAudit('admin', 'pause_all_autotrade', `rows=${result.rowCount} reason=${(reason||'').slice(0,100)}`, { rowCount: result.rowCount }, req); } catch(e){}
+    }
+    safeLog('[Admin] pause-all', { rowCount: result.rowCount, pauseUntil: pauseUntil?.toISOString() });
+    res.json({ ok: true, paused: result.rowCount, pauseUntil: pauseUntil?.toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to pause autotrade' });
+  }
+});
+
+// POST /api/admin/autotrade/resume-all — Resume autotrade after pause-all
+app.post('/api/admin/autotrade/resume-all', adminLimiter, verifyAdminSecret, async (req, res) => {
+  try {
+    const result = await pool.query(`UPDATE broker_configs SET circuit_breaker_until = NULL WHERE circuit_breaker_until IS NOT NULL`);
+    if (typeof logAudit === 'function') {
+      try { await logAudit('admin', 'resume_all_autotrade', `rows=${result.rowCount}`, { rowCount: result.rowCount }, req); } catch(e){}
+    }
+    res.json({ ok: true, resumed: result.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to resume autotrade' });
+  }
 });
 
 // ════════════════════════════════════════════════════
@@ -1667,17 +1798,56 @@ app.get('/api/broker/status', verifyToken, brokerLimiter, async (req, res) => {
         maxLeverage: parseInt(cfg.max_leverage),
         dailyLossLimitUsd: parseFloat(cfg.daily_loss_limit_usd),
         dailyLossCurrent
+      },
+      // 2026-04-22 audit fix 2.5: return safety state for frontend sync
+      safety: {
+        consecutiveLosses: parseInt(cfg.consecutive_losses || 0),
+        circuitBreakerUntil: cfg.circuit_breaker_until ? new Date(cfg.circuit_breaker_until).toISOString() : null,
+        maxConcurrentPositions: parseInt(cfg.max_concurrent_positions || 4),
+        maxCapitalDeployedPct: parseFloat(cfg.max_capital_deployed_pct || 50),
+        lastDailyResetAt: cfg.daily_loss_reset_at ? new Date(cfg.daily_loss_reset_at).toISOString() : null
       }
     });
   } catch (err) {
-    console.error('[Broker] status error:', err);
+    safeLog('[Broker] status error', { keyId: req.license?.keyId, msg: err.message });
     res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
 
 // Place a real trade (market entry + TP + SL)
-app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res) => {
+// v2.0 Idempotency cache for order placement (prevents duplicate orders on retry)
+const _idempotencyCache = new Map();
+function checkIdempotency(key) {
+  if (!key) return null;
+  const entry = _idempotencyCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > 10 * 60 * 1000) { _idempotencyCache.delete(key); return null; }
+  return entry.response;
+}
+function storeIdempotency(key, response) {
+  if (!key) return;
+  _idempotencyCache.set(key, { ts: Date.now(), response });
+  // Cleanup: remove oldest if >1000 entries
+  if (_idempotencyCache.size > 1000) {
+    const oldest = _idempotencyCache.keys().next().value;
+    _idempotencyCache.delete(oldest);
+  }
+}
+// Periodic cleanup
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [k, v] of _idempotencyCache.entries()) {
+    if (v.ts < cutoff) _idempotencyCache.delete(k);
+  }
+}, 5 * 60 * 1000);
+app.post('/api/broker/place-order', verifyOriginMiddleware, verifyToken, brokerLimiter, async (req, res) => {
   try {
+    // v2.0 Idempotency: same key returns cached result (prevents duplicate order on network retry)
+    const idempKey = req.get('X-Idempotency-Key') || req.body?.clientOrderId;
+    if (idempKey) {
+      const cached = checkIdempotency(idempKey + '|' + req.license.keyId);
+      if (cached) return res.status(cached.status || 200).json(cached.body);
+    }
     const { symbol, side, usdAmount, leverage, tp, sl, currentPrice } = req.body;
     if (!symbol || !side || !usdAmount || !leverage || !tp || !sl || !currentPrice) {
       return res.status(400).json({ error: 'Parámetros incompletos' });
@@ -1688,6 +1858,12 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
     if (!rxValidate.usdAmount(usdAmount)) return res.status(400).json({ error: 'Monto fuera de rango ($10-$10000)' });
     if (!rxValidate.leverage(leverage)) return res.status(400).json({ error: 'Leverage debe ser entero 1-20' });
     if (!rxValidate.price(tp) || !rxValidate.price(sl) || !rxValidate.price(currentPrice)) return res.status(400).json({ error: 'Precios inválidos' });
+    // v2.0 Store response after completion (use res.json wrapper)
+    const _origJson = res.json.bind(res);
+    res.json = function(body) {
+      if (idempKey) storeIdempotency(idempKey + '|' + req.license.keyId, { status: res.statusCode, body });
+      return _origJson(body);
+    };
 
     const { rows } = await pool.query(
       'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
@@ -1755,8 +1931,8 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
       console.warn('[Broker] Concurrent position check failed (allowing trade):', e.message);
     }
 
-    // Verbose pre-flight logging (helps debug TP/SL issues in production)
-    console.log(`[Broker] place-order → key=${req.license.keyId} ${side} ${symbol} $${usdAmount} x${leverage} entry=${currentPrice} tp=${tp} sl=${sl}`);
+    // 2026-04-22 audit fix 1.6: safeLog masks keyId + amount, suppresses in prod unless LOG_VERBOSE
+    safeLog('[Broker] place-order', { keyId: req.license.keyId, side, symbol, amount: parseFloat(usdAmount), leverage });
 
     const result = await broker.placeTradeWithTPSL(apiKey, apiSecret, {
       symbol, side, usdAmount: parseFloat(usdAmount),
@@ -1764,31 +1940,46 @@ app.post('/api/broker/place-order', verifyToken, brokerLimiter, async (req, res)
       currentPrice: parseFloat(currentPrice)
     });
 
-    // Detailed post-trade logging
+    // Detailed post-trade logging (PII-safe via safeLog)
     const tpOK = !!(result.tp && result.tp.orderId);
     const slOK = !!(result.sl && result.sl.orderId);
     const entryOK = !!(result.entry && result.entry.orderId);
-    console.log(`[Broker] place-order result → entry=${entryOK?'✓':'✗'} tp=${tpOK?'✓':'✗'} sl=${slOK?'✓':'✗'}${result.tpError?' TP_ERR:'+result.tpError:''}${result.slError?' SL_ERR:'+result.slError:''}${result.emergencyClosed?' EMERGENCY_CLOSED':''}`);
+    safeLog('[Broker] place-order result', { keyId: req.license.keyId, entry: entryOK, tp: tpOK, sl: slOK, tpErr: result.tpError ? 'yes' : 'no', slErr: result.slError ? 'yes' : 'no', emergencyClosed: !!result.emergencyClosed });
 
-    // Log the trade with full status breakdown
+    // 2026-04-22 audit fix 4.2: atomic transaction for log+update
     const tradeStatus = (entryOK && tpOK && slOK) ? 'placed' : (entryOK ? 'partial' : 'error');
     const errMsgAgg = [result.tpError ? 'TP:'+result.tpError : '', result.slError ? 'SL:'+result.slError : '', result.emergencyClosed ? 'EMERGENCY_CLOSE_TRIGGERED' : ''].filter(Boolean).join(' | ');
-    await pool.query(`
-      INSERT INTO broker_trade_log (key_id, symbol, side, usd_amount, leverage, entry_price, tp_price, sl_price, binance_order_id, status, error_msg)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-    `, [
-      req.license.keyId, symbol, side, parseFloat(usdAmount), parseInt(leverage),
-      parseFloat(currentPrice), parseFloat(tp), parseFloat(sl),
-      String(result.entry?.orderId || ''), tradeStatus, errMsgAgg
-    ]);
-
-    await pool.query('UPDATE broker_configs SET last_used = NOW() WHERE id = $1', [cfg.id]);
+    const txClient = await pool.connect();
+    try {
+      await txClient.query('BEGIN');
+      await txClient.query(`
+        INSERT INTO broker_trade_log (key_id, symbol, side, usd_amount, leverage, entry_price, tp_price, sl_price, binance_order_id, status, error_msg)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `, [
+        req.license.keyId, symbol, side, parseFloat(usdAmount), parseInt(leverage),
+        parseFloat(currentPrice), parseFloat(tp), parseFloat(sl),
+        String(result.entry?.orderId || ''), tradeStatus, errMsgAgg
+      ]);
+      await txClient.query('UPDATE broker_configs SET last_used = NOW() WHERE id = $1', [cfg.id]);
+      await txClient.query('COMMIT');
+    } catch (logErr) {
+      try { await txClient.query('ROLLBACK'); } catch(e){}
+      // CRITICAL: trade placed en Binance but log failed. Alert + persist to fallback file.
+      console.error('[CRITICAL] Trade placed but DB log failed:', logErr.message, 'orderId=', result.entry?.orderId);
+      try {
+        // Best-effort fallback: try non-transactional insert for audit
+        await pool.query(`INSERT INTO broker_trade_log (key_id, symbol, side, usd_amount, leverage, status, error_msg) VALUES ($1,$2,$3,$4,$5,'logged_after_tx_fail',$6)`,
+          [req.license.keyId, symbol, side, parseFloat(usdAmount), parseInt(leverage), `TX_FAIL: ${logErr.message} | orderId=${result.entry?.orderId}`]);
+      } catch(e2) {}
+    } finally {
+      txClient.release();
+    }
 
     // Return with explicit success flags for frontend UX
     res.json({ ok: true, result, tpPlaced: tpOK, slPlaced: slOK, entryPlaced: entryOK, warning: !tpOK || !slOK ? 'TP o SL no se pudo colocar — chequeá tu posición en Binance manualmente' : null });
   } catch (err) {
-    console.error('[Broker] place-order error:', err.message, '— keyId:', req.license?.keyId, 'symbol:', req.body?.symbol);
-    // Log the error too
+    // 2026-04-22 audit fix 1.6 + 4.4: PII-safe error log
+    safeLog('[Broker] place-order error', { keyId: req.license?.keyId, symbol: req.body?.symbol, msg: err.message });
     try {
       await pool.query(`
         INSERT INTO broker_trade_log (key_id, symbol, side, usd_amount, leverage, status, error_msg)
@@ -2113,6 +2304,22 @@ process.on('uncaughtException', (err) => {
   try { (global.rxLog?.error || console.error)('[FATAL] Uncaught exception', { msg: err.message, stack: err.stack?.split('\n').slice(0,3).join(' | ') }); } catch(e){}
   if (process.env.NODE_ENV === 'production') setTimeout(() => process.exit(1), 100);
 });
+// 2026-04-22 audit fix 4.1: Global error middleware sanitizes stack traces in production
+app.use((err, req, res, next) => {
+  try {
+    console.error('[Error]', { path: req.path, msg: err?.message, stack: err?.stack?.split('\n').slice(0,3).join(' | ') });
+  } catch(e) {}
+  if (res.headersSent) return next(err);
+  const isProd = process.env.NODE_ENV === 'production';
+  const status = err?.statusCode || err?.status || 500;
+  res.status(status).json({
+    error: isProd ? 'Error interno del servidor' : (err?.message || 'Unknown error'),
+    code: err?.code || 'INTERNAL_ERROR',
+    ts: new Date().toISOString(),
+    ...(isProd ? {} : { stack: err?.stack?.split('\n').slice(0,5).join('\n') })
+  });
+});
+
 // Graceful shutdown on SIGTERM (Render deploy, K8s, Docker)
 let _httpServer = null;
 function gracefulShutdown(signal) {
@@ -2137,17 +2344,25 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 // Required env vars validation at boot
 function validateEnv() {
   const required = ['JWT_SECRET', 'DATABASE_URL'];
-  const recommended = ['BROKER_MASTER_KEY', 'CORS_ORIGIN'];
-  const prodRequired = ['STRIPE_WEBHOOK_SECRET', 'NOWPAYMENTS_IPN_SECRET', 'MP_WEBHOOK_SECRET'];
+  const recommended = ['CORS_ORIGIN'];
+  // v2.0: BROKER_MASTER_KEY REQUIRED in production (cannot encrypt broker keys without it)
+  const prodRequired = ['STRIPE_WEBHOOK_SECRET', 'NOWPAYMENTS_IPN_SECRET', 'MP_WEBHOOK_SECRET', 'BROKER_MASTER_KEY'];
   const missing = [];
   const warnings = [];
   required.forEach(k => { if (!process.env[k]) missing.push(k); });
   recommended.forEach(k => { if (!process.env[k]) warnings.push(k); });
   if (process.env.NODE_ENV === 'production') {
-    prodRequired.forEach(k => { if (!process.env[k]) warnings.push(`${k} (production)`); });
+    prodRequired.forEach(k => { if (!process.env[k]) missing.push(`${k} (production)`); });
+    // BROKER_MASTER_KEY strict format: 64 hex chars (32 bytes)
+    const bmk = process.env.BROKER_MASTER_KEY || '';
+    if (bmk && !/^[a-f0-9]{64}$/i.test(bmk)) {
+      missing.push('BROKER_MASTER_KEY (must be 64 hex chars)');
+    }
+  } else {
+    if (!process.env.BROKER_MASTER_KEY) warnings.push('BROKER_MASTER_KEY (dev mode)');
   }
   if (missing.length > 0) {
-    console.error(`[ENV] Missing REQUIRED env vars: ${missing.join(', ')}`);
+    console.error(`[ENV] Missing/invalid REQUIRED env vars: ${missing.join(', ')}`);
     process.exit(1);
   }
   if (warnings.length > 0) {
