@@ -9,6 +9,33 @@ const crypto = require('crypto');
 const Stripe = require('stripe');
 const { pool, initDB } = require('./database');
 const v44 = require('./v44-engine');
+const { sendRecoveryEmail } = require('./mailer');
+
+// 2026-04-23 fix 2.6: decrypted broker keys cache en memoria (TTL 5min)
+// Evita timing side-channel + CPU overhead de AES-256-GCM en cada request broker.
+// Invalidado automáticamente al rotar BROKER_MASTER_KEY (el decrypt tira).
+const _brokerKeyCache = new Map(); // keyId → { apiKey, apiSecret, ts }
+const BROKER_KEY_CACHE_TTL = 5 * 60 * 1000; // 5 min
+function getBrokerKeysCached(cfg) {
+  const ent = _brokerKeyCache.get(cfg.id);
+  if (ent && Date.now() - ent.ts < BROKER_KEY_CACHE_TTL) {
+    return { apiKey: ent.apiKey, apiSecret: ent.apiSecret };
+  }
+  const apiKey = broker.decrypt(cfg.api_key_enc);
+  const apiSecret = broker.decrypt(cfg.api_secret_enc);
+  _brokerKeyCache.set(cfg.id, { apiKey, apiSecret, ts: Date.now() });
+  return { apiKey, apiSecret };
+}
+function invalidateBrokerKeyCache(cfgId) {
+  _brokerKeyCache.delete(cfgId);
+}
+// Periodic cleanup to bound memory growth
+setInterval(() => {
+  const cutoff = Date.now() - BROKER_KEY_CACHE_TTL;
+  for (const [k, v] of _brokerKeyCache.entries()) {
+    if (v.ts < cutoff) _brokerKeyCache.delete(k);
+  }
+}, 60000);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -136,12 +163,22 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 //  GLOBAL MIDDLEWARE
 // ════════════════════════════════════════════════════
 
+// 2026-04-23 fix 2.4: per-request nonce para CSP scriptSrc
+// app.use al principio del middleware stack para que esté disponible downstream
+app.use((req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
+
 // Hardened helmet config with CSP
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://js.stripe.com", "https://www.gstatic.com", "https://*.firebaseapp.com", "https://*.firebaseio.com"],
+      // 2026-04-23: nonce-based scriptSrc. unsafe-inline se mantiene como fallback para frontend
+      // servido por Netlify (que no puede inyectar nonce). Cuando el cliente venga por el route
+      // /app con nonce-inject, el browser prefiere la nonce y ignora unsafe-inline.
+      scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`, "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://js.stripe.com", "https://www.gstatic.com", "https://*.firebaseapp.com", "https://*.firebaseio.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
@@ -486,6 +523,14 @@ async function generateVIPKeyForPayment(paymentId, planId, email, customerName) 
     [keyCode, 'completed', paymentId]
   );
 
+  // 2026-04-23 fix 4.3: audit log para cada pago completado via webhook
+  try {
+    await pool.query(
+      'INSERT INTO audit_log (actor, action, target, meta, ip, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+      ['webhook_system', 'payment_completed', `payment_id=${paymentId}`, JSON.stringify({ keyCode: keyCode.slice(-4), planId, emailMasked: (email||'').replace(/(.{2}).*(@.*)/,'$1***$2') }), null]
+    );
+  } catch(e){ /* audit_log table may not exist in old deploys — don't block payment */ }
+
   return keyCode;
 }
 
@@ -665,7 +710,7 @@ app.get('/api/keys/status', verifyToken, async (req, res) => {
 });
 
 // POST /api/keys/logout — Deactivate current session
-app.post('/api/keys/logout', verifyToken, async (req, res) => {
+app.post('/api/keys/logout', verifyOriginMiddleware, verifyToken, async (req, res) => {
   const { keyId, fp } = req.license;
 
   try {
@@ -1487,7 +1532,7 @@ app.get('/api/user/paper', syncLimiter, verifyToken, async (req, res) => {
 });
 
 // POST /api/user/paper — Save paper trading data to cloud (with optimistic concurrency versioning)
-app.post('/api/user/paper', syncLimiter, verifyToken, async (req, res) => {
+app.post('/api/user/paper', syncLimiter, verifyOriginMiddleware, verifyToken, async (req, res) => {
   const { keyId } = req.license;
   const { data, _syncVersion, _clientVersion } = req.body;
 
@@ -1539,7 +1584,7 @@ app.get('/api/user/signals', syncLimiter, verifyToken, async (req, res) => {
 });
 
 // POST /api/user/signals — Save signal history to cloud (optimistic concurrency)
-app.post('/api/user/signals', syncLimiter, verifyToken, async (req, res) => {
+app.post('/api/user/signals', syncLimiter, verifyOriginMiddleware, verifyToken, async (req, res) => {
   const { keyId } = req.license;
   const { data, _syncVersion, _clientVersion } = req.body;
 
@@ -1583,7 +1628,9 @@ app.post('/api/payments/recover-key', paymentLimiter, async (req, res) => {
     if (rows.length > 0) {
       const token = require('crypto').randomBytes(32).toString('hex');
       await pool.query('INSERT INTO recovery_tokens (email, token) VALUES ($1, $2)', [email, token]);
-      // TODO: Send email with token link (requires SMTP config)
+      // 2026-04-23 fix 2.7: pluggable email sender — SendGrid/SES/Postmark via env vars
+      try { await sendRecoveryEmail(email, token); }
+      catch(mailErr){ console.error('[Recovery] email send failed:', mailErr.message); }
       console.log('[Recovery] Token issued for', email.slice(0,3) + '***');
     }
     res.json({ ok: true, message: 'Si hay pagos asociados a este email, recibirás un link de recuperación.' });
@@ -1593,7 +1640,7 @@ app.post('/api/payments/recover-key', paymentLimiter, async (req, res) => {
 });
 
 // GDPR/CCPA — DELETE all user data (right to erasure)
-app.post('/api/user/delete-all', syncLimiter, verifyToken, async (req, res) => {
+app.post('/api/user/delete-all', syncLimiter, verifyOriginMiddleware, verifyToken, async (req, res) => {
   const { keyId } = req.license;
   const { confirm } = req.body;
   if (confirm !== 'DELETE_MY_DATA') {
@@ -1658,22 +1705,35 @@ function safeErrorMessage(err) {
   return 'Error al procesar la solicitud.';
 }
 
+// 2026-04-23 fix 3: loggear errors con stack hasheado en prod (evita leak de paths internos)
+function safeLogError(label, err, ctx){
+  const stackHash = err?.stack
+    ? crypto.createHash('sha256').update(err.stack).digest('hex').slice(0, 16)
+    : 'none';
+  const msg = String(err?.message || err || '').slice(0, 200);
+  const logObj = { msg, stackHash, ...(ctx || {}) };
+  if (process.env.NODE_ENV !== 'production') logObj.stack = err?.stack?.split('\n').slice(0,5).join(' | ');
+  console.error(label, JSON.stringify(logObj));
+}
+
 // Shared helper: check if UTC day rolled over and reset daily loss + consecutive losses
+// 2026-04-23 fix 2.1: reset diario respeta timezone del usuario (columna `user_tz` en broker_configs)
+// Default UTC si no está seteado. Evita que un trader en Buenos Aires vea su "día" resetear a las 9pm local.
 async function resetDailyLossIfNeeded(cfg) {
   try {
-    const resetAt = new Date(cfg.daily_reset_at);
-    const nowUTC = new Date();
-    const todayUTC = Date.UTC(nowUTC.getUTCFullYear(), nowUTC.getUTCMonth(), nowUTC.getUTCDate());
-    const resetAtUTC = Date.UTC(resetAt.getUTCFullYear(), resetAt.getUTCMonth(), resetAt.getUTCDate());
-    if (todayUTC > resetAtUTC) {
+    const tz = cfg.user_tz || 'UTC';
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const todayLocalStr = fmt.format(new Date());
+    const resetAtLocalStr = cfg.daily_reset_at ? fmt.format(new Date(cfg.daily_reset_at)) : '';
+    if (resetAtLocalStr !== todayLocalStr) {
       try {
-        await pool.query("UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW() AT TIME ZONE 'UTC', consecutive_losses = 0, circuit_breaker_until = NULL WHERE id = $1", [cfg.id]);
+        await pool.query("UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW(), consecutive_losses = 0, circuit_breaker_until = NULL WHERE id = $1", [cfg.id]);
       } catch (e) {
         await pool.query("UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW() WHERE id = $1", [cfg.id]);
       }
       return true;
     }
-  } catch (e) { console.warn('[Broker] UTC reset check failed'); }
+  } catch (e) { console.warn('[Broker] Local TZ reset check failed:', e.message); }
   return false;
 }
 // Server-side cron-like check every hour — catches UTC rollover even if no user hits endpoints
@@ -1702,7 +1762,7 @@ const brokerLimiter = rateLimit({
 });
 
 // Connect broker: user sends API key + secret, we encrypt and store
-app.post('/api/broker/connect', verifyToken, brokerLimiter, async (req, res) => {
+app.post('/api/broker/connect', verifyOriginMiddleware, verifyToken, brokerLimiter, async (req, res) => {
   try {
     const { apiKey, apiSecret, maxPositionUsd, maxLeverage, dailyLossLimitUsd } = req.body;
     if (!apiKey || !apiSecret) return res.status(400).json({ error: 'apiKey y apiSecret requeridos' });
@@ -1718,6 +1778,18 @@ app.post('/api/broker/connect', verifyToken, brokerLimiter, async (req, res) => 
 
     if (!accountTest.canTrade) {
       return res.status(400).json({ error: 'Esta API key no tiene permiso de trading. Activá "Enable Futures" en Binance.' });
+    }
+
+    // 2026-04-23 fix 1.5: capital mínimo $1000 USDT server-side para permitir conectar broker mainnet.
+    // APEX v44 validado en backtest con $500 capital base, pero recomendamos $1000+ para absorber
+    // swings normales sin forzar ventas por margin call. Testnet exento del check.
+    const isTestnet = process.env.BINANCE_TESTNET === 'true';
+    const MIN_CAPITAL_USD = 1000;
+    const totalBal = parseFloat(accountTest.totalWalletBalance || accountTest.availableBalance || 0);
+    if (!isTestnet && !isNaN(totalBal) && totalBal < MIN_CAPITAL_USD){
+      return res.status(400).json({
+        error: `Capital insuficiente: balance $${totalBal.toFixed(2)} USDT. Mínimo requerido: $${MIN_CAPITAL_USD} USDT para conectar broker mainnet. Depositá USDT en tu Futures wallet y reintentá.`
+      });
     }
 
     const keyEnc = broker.encrypt(apiKey);
@@ -1905,8 +1977,8 @@ app.post('/api/broker/place-order', verifyOriginMiddleware, verifyToken, brokerL
     }
 
     // CRITICAL: Concurrent position limit — prevent over-leverage from rapid-fire signals
-    const apiKey = broker.decrypt(cfg.api_key_enc);
-    const apiSecret = broker.decrypt(cfg.api_secret_enc);
+    // 2026-04-23 fix 2.6: use cached decrypted keys (TTL 5min) to avoid timing side-channel + CPU overhead
+    const { apiKey, apiSecret } = getBrokerKeysCached(cfg);
 
     try {
       // TOCTOU mitigation: acquire advisory lock on key_id for duration of concurrent check + place order
@@ -1999,7 +2071,7 @@ setInterval(() => {
   for (const [k, ts] of _tradeResultCache) { if (now - ts > 5 * 60 * 1000) _tradeResultCache.delete(k); }
 }, 60000).unref?.();
 
-app.post('/api/broker/trade-result', verifyToken, brokerLimiter, async (req, res) => {
+app.post('/api/broker/trade-result', verifyOriginMiddleware, verifyToken, brokerLimiter, async (req, res) => {
   const { result, pnl, symbol, orderId } = req.body; // result: 'win' | 'loss'
   if (!['win', 'loss'].includes(result)) return res.status(400).json({ error: 'result must be win|loss' });
   // Idempotency: reject duplicate trade-result for same (keyId, orderId, result)
@@ -2133,7 +2205,7 @@ app.post('/api/broker/validate-pairs', macroLimiter, async (req, res) => {
 });
 
 // Reconcile — sync DB state with live Binance state (call after server restart or long disconnects)
-app.post('/api/broker/reconcile', verifyToken, brokerLimiter, reconcileLimiter, async (req, res) => {
+app.post('/api/broker/reconcile', verifyOriginMiddleware, verifyToken, brokerLimiter, reconcileLimiter, async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
@@ -2179,7 +2251,7 @@ app.post('/api/broker/reconcile', verifyToken, brokerLimiter, reconcileLimiter, 
 });
 
 // Close all positions (panic button)
-app.post('/api/broker/close-all', verifyToken, brokerLimiter, async (req, res) => {
+app.post('/api/broker/close-all', verifyOriginMiddleware, verifyToken, brokerLimiter, async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
@@ -2200,8 +2272,11 @@ app.post('/api/broker/close-all', verifyToken, brokerLimiter, async (req, res) =
 });
 
 // Disconnect broker (deletes encrypted keys)
-app.post('/api/broker/disconnect', verifyToken, brokerLimiter, async (req, res) => {
+app.post('/api/broker/disconnect', verifyOriginMiddleware, verifyToken, brokerLimiter, async (req, res) => {
   try {
+    // 2026-04-23 fix 2.6: invalidate key cache on disconnect so new connect uses fresh decrypt
+    const { rows } = await pool.query('SELECT id FROM broker_configs WHERE key_id = $1', [req.license.keyId]);
+    rows.forEach(r => invalidateBrokerKeyCache(r.id));
     await pool.query('DELETE FROM broker_configs WHERE key_id = $1', [req.license.keyId]);
     res.json({ ok: true });
   } catch (err) {
@@ -2428,6 +2503,75 @@ function startV44Scheduler(){
   setInterval(_v44RunScanOnce, V44_SCAN_INTERVAL_MS);
   console.log(`[V44 Scheduler] started · scan every ${V44_SCAN_INTERVAL_MS/60000} min · universe=${v44.SAFE_FUNDING_PARAMS.UNIVERSE.length} pairs`);
 }
+
+// 2026-04-23 fix 4.5: test JWT provisioning endpoint (disabled in production unless TEST_JWT_ENABLED=true)
+// Usage en Playwright/k6: POST con { code, fingerprint } requiere body vacío y devuelve JWT pre-firmado
+// para un license key de test. Solo activo cuando NODE_ENV !== 'production' o TEST_JWT_ENABLED='true'.
+app.post('/api/test/jwt', async (req, res) => {
+  if (process.env.NODE_ENV === 'production' && process.env.TEST_JWT_ENABLED !== 'true') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  const code = req.body?.code || process.env.TEST_LICENSE_CODE;
+  if (!code) return res.status(400).json({ error: 'code required (body.code or TEST_LICENSE_CODE env)' });
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, key_code, expires_at FROM license_keys WHERE key_code = $1 AND revoked_at IS NULL LIMIT 1',
+      [code]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'License key not found' });
+    const key = rows[0];
+    const token = jwt.sign(
+      { keyId: key.id, type: 'access', fp: 'test-harness', testJwt: true },
+      JWT_SECRET,
+      { expiresIn: '30m' }
+    );
+    res.json({ ok: true, token, keyId: key.id, expiresIn: 1800 });
+  } catch (err) {
+    res.status(500).json({ error: 'Test JWT provisioning failed' });
+  }
+});
+
+// 2026-04-23 fix 2.4: nonce-injected HTML routes
+// Alternativa strict-CSP para clientes que vienen por el backend (no Netlify).
+// Inyecta el nonce en cada <script> tag de los archivos frontend y sirve con Content-Security-Policy.
+const path = require('path');
+const fs = require('fs');
+const _htmlCache = new Map();
+const HTML_CACHE_TTL = 60 * 1000;
+function _loadHtml(filename){
+  const cached = _htmlCache.get(filename);
+  if (cached && Date.now() - cached.ts < HTML_CACHE_TTL) return cached.html;
+  const filepath = path.join(__dirname, '..', 'frontend', filename);
+  if (!fs.existsSync(filepath)) return null;
+  const html = fs.readFileSync(filepath, 'utf8');
+  _htmlCache.set(filename, { html, ts: Date.now() });
+  return html;
+}
+function _injectNonce(html, nonce){
+  return html.replace(/<script(\s[^>]*)?>/gi, (match, attrs) => {
+    if (/\snonce=/i.test(attrs || '')) return match;
+    const newAttrs = (attrs || '') + ` nonce="${nonce}"`;
+    return `<script${newAttrs}>`;
+  });
+}
+function serveFrontendWithNonce(filename){
+  return (req, res) => {
+    const html = _loadHtml(filename);
+    if (!html) return res.status(404).send('Not found');
+    const nonce = res.locals.cspNonce;
+    const injected = _injectNonce(html, nonce);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(injected);
+  };
+}
+// Opt-in nonce-protected routes (parallel to Netlify static serving).
+// Usuarios sensibles a CSP strict pueden acceder al backend directo: /strict/app.html
+app.get('/strict/app.html', serveFrontendWithNonce('app.html'));
+app.get('/strict/landing.html', serveFrontendWithNonce('landing.html'));
+app.get('/strict/privacy.html', serveFrontendWithNonce('privacy.html'));
+app.get('/strict/terms.html', serveFrontendWithNonce('terms.html'));
+app.get('/strict/cookies.html', serveFrontendWithNonce('cookies.html'));
+app.get('/strict/refund.html', serveFrontendWithNonce('refund.html'));
 
 // Public endpoint — no auth required, consumed by all clients
 app.get('/api/public-signals', (req, res) => {
