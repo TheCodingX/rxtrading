@@ -2462,11 +2462,22 @@ const V44_SIGNAL_STORE = {
 const V44_MAX_FEED_SIZE = 500;    // Keep last 500 signals in memory
 const V44_SCAN_INTERVAL_MS = 10 * 60 * 1000; // 10 min — V44 fires on 1h bar closes anyway
 const V44_SIGNAL_TTL_MS = 4 * 60 * 60 * 1000; // 4h hold window of V44
-const V44_DEDUP_WINDOW_MS = 55 * 60 * 1000; // 55 min per pair (matches frontend cooldown)
+// 2026-04-23 CAPITAL GUARD: dedup 4h = hold_hours del motor V44. Antes 55min → misma señal
+// podía re-insertarse a los 60min y spamear al frontend aunque el trade siguiera vivo.
+const V44_DEDUP_WINDOW_MS = 4 * 60 * 60 * 1000;
 
-function _v44Dedup(sym, signalType){
+function _v44Dedup(sym, signalType, entry, tp, sl){
   const cutoff = Date.now() - V44_DEDUP_WINDOW_MS;
-  return V44_SIGNAL_STORE.signals.some(s => s.symbol === sym && s.signal === signalType && s.created_at > cutoff);
+  // Dedup por dirección + mismos niveles TP/SL/entry (setup idéntico)
+  // Si los niveles difieren significativamente (>0.1%), es un setup nuevo → se permite
+  return V44_SIGNAL_STORE.signals.some(s => {
+    if(s.symbol !== sym || s.signal !== signalType || s.created_at <= cutoff) return false;
+    if(entry == null || tp == null || sl == null) return true; // match básico si no hay niveles
+    const entryDrift = s.entry ? Math.abs(entry - s.entry) / s.entry : 0;
+    const tpDrift = s.tp ? Math.abs(tp - s.tp) / s.tp : 0;
+    const slDrift = s.sl ? Math.abs(sl - s.sl) / s.sl : 0;
+    return entryDrift < 0.001 && tpDrift < 0.001 && slDrift < 0.001;
+  });
 }
 
 async function _v44RunScanOnce(){
@@ -2476,7 +2487,7 @@ async function _v44RunScanOnce(){
     V44_SIGNAL_STORE.lastScanResult = { scanned: res.scanned, signals_found: res.signals.length, window_type: res.window_type || null, reason: res.reason };
     V44_SIGNAL_STORE.stats.totalScans++;
     for(const sig of res.signals){
-      if(_v44Dedup(sig.symbol, sig.signal)) continue;
+      if(_v44Dedup(sig.symbol, sig.signal, sig.entry, sig.tp, sig.sl)) continue;
       const rec = {
         id: crypto.randomBytes(6).toString('hex'),
         ...sig,
