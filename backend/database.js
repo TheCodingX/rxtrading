@@ -164,7 +164,99 @@ async function initDB() {
     `CREATE INDEX IF NOT EXISTS idx_license_keys_key_code ON license_keys(key_code)`,
     `CREATE INDEX IF NOT EXISTS idx_payments_payment_id ON payments(payment_id)`,
     `CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)`,
-    `CREATE INDEX IF NOT EXISTS idx_activations_key_id ON activations(key_id)`
+    `CREATE INDEX IF NOT EXISTS idx_activations_key_id ON activations(key_id)`,
+
+    // ══════════════════════════════════════════════════════════════════════
+    // 2026-04-25 — SIGNAL SYSTEM v2 (server-side source of truth)
+    //   Tablas: signals, signal_events, signal_trades, notifications
+    //   Garantiza: dedup global, state machine, expiration cron, reliable delivery,
+    //   multi-client sync, audit trail completo.
+    // ══════════════════════════════════════════════════════════════════════
+
+    // signals: source of truth global. UNIQUE(symbol, direction, bucket_minute, engine_version) previene duplicados.
+    `CREATE TABLE IF NOT EXISTS signals (
+      id BIGSERIAL PRIMARY KEY,
+      signal_id TEXT UNIQUE NOT NULL,
+      symbol TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      engine_version TEXT NOT NULL,
+      bucket_minute BIGINT NOT NULL,
+      entry NUMERIC(20,8) NOT NULL,
+      tp NUMERIC(20,8) NOT NULL,
+      sl NUMERIC(20,8) NOT NULL,
+      confidence NUMERIC(6,3) NOT NULL,
+      ts TIMESTAMPTZ NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      state TEXT NOT NULL DEFAULT 'ACTIVE',
+      state_changed_at TIMESTAMPTZ DEFAULT NOW(),
+      superseded_by BIGINT REFERENCES signals(id) ON DELETE SET NULL,
+      meta JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT signals_state_chk CHECK (state IN ('NEW','ACTIVE','TRADED','EXPIRED','SUPERSEDED','CANCELED')),
+      CONSTRAINT signals_dir_chk CHECK (direction IN ('BUY','SELL')),
+      CONSTRAINT signals_unique_bucket UNIQUE (symbol, direction, bucket_minute, engine_version)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_signals_state_active ON signals(state) WHERE state = 'ACTIVE'`,
+    `CREATE INDEX IF NOT EXISTS idx_signals_state_expires ON signals(state, expires_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_signals_signalid ON signals(signal_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_signals_engine_ts ON signals(engine_version, ts DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_signals_symbol_state ON signals(symbol, state)`,
+
+    // signal_events: audit log + WS sequence delivery (clients track lastSeq, request gap fill on reconnect)
+    `CREATE TABLE IF NOT EXISTS signal_events (
+      sequence_number BIGSERIAL PRIMARY KEY,
+      signal_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      prev_state TEXT,
+      new_state TEXT,
+      meta JSONB DEFAULT '{}',
+      ts TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT signal_events_type_chk CHECK (event_type IN ('created','state_changed','superseded','expired','traded'))
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_signal_events_signalid ON signal_events(signal_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_signal_events_ts ON signal_events(ts DESC)`,
+
+    // signal_trades: link signal ↔ user trade. UNIQUE(signal_id, key_id) garantiza UN trade por usuario por señal.
+    `CREATE TABLE IF NOT EXISTS signal_trades (
+      id BIGSERIAL PRIMARY KEY,
+      signal_id TEXT NOT NULL REFERENCES signals(signal_id) ON DELETE CASCADE,
+      key_id INTEGER NOT NULL REFERENCES license_keys(id) ON DELETE CASCADE,
+      trade_state TEXT NOT NULL DEFAULT 'PENDING_OPEN',
+      mode TEXT NOT NULL DEFAULT 'paper',
+      open_price NUMERIC(20,8),
+      close_price NUMERIC(20,8),
+      close_reason TEXT,
+      pnl NUMERIC(20,8),
+      binance_order_id TEXT,
+      opened_at TIMESTAMPTZ,
+      closed_at TIMESTAMPTZ,
+      meta JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT signal_trades_state_chk CHECK (trade_state IN ('PENDING_OPEN','OPEN','PENDING_CLOSE','CLOSED','FAILED')),
+      CONSTRAINT signal_trades_mode_chk CHECK (mode IN ('paper','real_testnet','real_mainnet')),
+      CONSTRAINT signal_trades_unique UNIQUE (signal_id, key_id, mode)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_signal_trades_user ON signal_trades(key_id, trade_state)`,
+    `CREATE INDEX IF NOT EXISTS idx_signal_trades_signal ON signal_trades(signal_id)`,
+
+    // notifications: persistent feed por user. UNIQUE(key_id, event_id) dedup garantizada.
+    `CREATE TABLE IF NOT EXISTS notifications (
+      id BIGSERIAL PRIMARY KEY,
+      key_id INTEGER NOT NULL REFERENCES license_keys(id) ON DELETE CASCADE,
+      event_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'INFO',
+      title TEXT NOT NULL,
+      body TEXT,
+      meta JSONB DEFAULT '{}',
+      read INTEGER DEFAULT 0,
+      acknowledged INTEGER DEFAULT 0,
+      ts TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT notif_severity_chk CHECK (severity IN ('CRITICAL','HIGH','MEDIUM','LOW','INFO')),
+      CONSTRAINT notif_unique UNIQUE (key_id, event_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_notif_user_ts ON notifications(key_id, ts DESC)`,
+    `CREATE INDEX IF NOT EXISTS idx_notif_unread ON notifications(key_id) WHERE read = 0`
   ];
   for (const sql of migrations) {
     try {

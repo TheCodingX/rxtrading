@@ -10,6 +10,12 @@ const Stripe = require('stripe');
 const { pool, initDB } = require('./database');
 const v44 = require('./v44-engine');
 const { sendRecoveryEmail } = require('./mailer');
+// 2026-04-25 Signal System v2 (server-side source of truth)
+const sigStore = require('./signal-store');
+const notifStore = require('./notification-store');
+const signalGenerator = require('./signal-generator');
+const signalCron = require('./signal-cron');
+const wsServer = require('./ws-server');
 
 // 2026-04-23 fix 2.6: decrypted broker keys cache en memoria (TTL 5min)
 // Evita timing side-channel + CPU overhead de AES-256-GCM en cada request broker.
@@ -833,6 +839,177 @@ app.get('/api/admin/metrics', verifyAdminSecret, (req, res) => {
     mode: process.env.BINANCE_TESTNET === 'true' ? 'testnet' : 'mainnet',
     ts: new Date().toISOString()
   });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// 2026-04-25 SIGNAL SYSTEM v2 — Server-side source of truth endpoints
+// ════════════════════════════════════════════════════════════════════════
+
+// Server time — clients use this to detect clock drift and use server time for TTLs.
+app.get('/api/server/time', (req, res) => {
+  res.json({
+    serverTime: Date.now(),
+    iso: new Date().toISOString(),
+    timezone: 'UTC'
+  });
+});
+
+// Snapshot of currently ACTIVE signals (filtered by engineVersion if provided).
+// Public read (no auth) — signals are global; user-specific data is in /api/signals/my-trades.
+app.get('/api/signals/active', async (req, res) => {
+  try {
+    const engineVersion = req.query.engine || null;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const signals = await sigStore.getActiveSignals({ engineVersion, limit });
+    const { rows } = await pool.query('SELECT COALESCE(MAX(sequence_number),0) AS last_seq FROM signal_events');
+    res.json({
+      signals,
+      lastSeq: parseInt(rows[0].last_seq, 10) || 0,
+      serverTime: Date.now(),
+      engineVersion
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'snapshot_failed', message: err.message });
+  }
+});
+
+// Get signal events since lastSeq — for WS gap fill via REST (fallback).
+app.get('/api/signals/events', async (req, res) => {
+  try {
+    const sinceSeq = parseInt(req.query.sinceSeq, 10) || 0;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 1000);
+    const events = await sigStore.getEventsSince(sinceSeq, limit);
+    res.json({ events, serverTime: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: 'events_failed', message: err.message });
+  }
+});
+
+// Atomic operate: claim a signal for a user. State transition ACTIVE → TRADED is row-locked.
+// Returns { ok: true, trade } if claimed; { ok: false, reason } otherwise.
+app.post('/api/signals/:signalId/operate', verifyOriginMiddleware, verifyToken, async (req, res) => {
+  try {
+    const signalId = req.params.signalId;
+    const { mode = 'paper', openPrice } = req.body || {};
+    const keyId = req.license.keyId;
+    const r = await sigStore.openTradeForSignal({
+      signalId, keyId, mode,
+      openPrice: openPrice != null ? parseFloat(openPrice) : null,
+      meta: { client_ip: req.ip, ua: req.headers['user-agent'] || '' }
+    });
+    if (!r.ok) return res.status(409).json(r);
+    // Persist notification for trade open
+    try {
+      await notifStore.insert({
+        keyId,
+        eventType: 'trade_open',
+        severity: 'HIGH',
+        title: `Trade abierto · ${r.signal.symbol} ${r.signal.direction}`,
+        body: `Entry $${r.trade.open_price || r.signal.entry} · TP $${r.signal.tp} · SL $${r.signal.sl}`,
+        refKey: `trade-open-${r.trade.id}`,
+        meta: { signal_id: signalId, trade_id: r.trade.id, mode }
+      });
+    } catch (_) {}
+    res.json(r);
+  } catch (err) {
+    res.status(500).json({ error: 'operate_failed', message: err.message });
+  }
+});
+
+// Close a trade. Reason MANDATORY and must be a valid RX_CLOSE_REASON.
+app.post('/api/signals/trades/:tradeId/close', verifyOriginMiddleware, verifyToken, async (req, res) => {
+  try {
+    const tradeId = parseInt(req.params.tradeId, 10);
+    const { closePrice, closeReason, pnl, meta = {} } = req.body || {};
+    if (!closeReason) return res.status(400).json({ error: 'closeReason required' });
+    // Verify trade belongs to this user
+    const { rows } = await pool.query('SELECT key_id FROM signal_trades WHERE id = $1', [tradeId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'trade_not_found' });
+    if (rows[0].key_id !== req.license.keyId) return res.status(403).json({ error: 'forbidden' });
+    const r = await sigStore.closeTrade({
+      tradeId,
+      closePrice: closePrice != null ? parseFloat(closePrice) : null,
+      closeReason,
+      pnl: pnl != null ? parseFloat(pnl) : null,
+      meta
+    });
+    if (!r.ok) return res.status(409).json(r);
+    // Notification
+    try {
+      const sevMap = {
+        TP_HIT: 'HIGH',
+        SL_HIT: 'HIGH',
+        SAFETY_GATE_DAILY_LOSS: 'CRITICAL',
+        SAFETY_GATE_DD: 'CRITICAL',
+        SAFETY_GATE_CIRCUIT_BREAKER: 'CRITICAL',
+        EXCHANGE_LIQUIDATION: 'CRITICAL',
+        ADMIN_OVERRIDE: 'CRITICAL',
+        RECONCILE_EXTERNAL: 'HIGH',
+        MANUAL_CLOSE: 'MEDIUM',
+        TIME_STOP: 'MEDIUM',
+        TRAILING_STOP_HIT: 'MEDIUM',
+        SIGNAL_SUPERSEDED: 'LOW'
+      };
+      const sev = sevMap[closeReason] || 'MEDIUM';
+      await notifStore.insert({
+        keyId: req.license.keyId,
+        eventType: 'trade_close',
+        severity: sev,
+        title: `Trade cerrado · ${closeReason.replace(/_/g, ' ')}`,
+        body: pnl != null ? `PnL: ${pnl >= 0 ? '+' : ''}$${Number(pnl).toFixed(2)}` : '',
+        refKey: `trade-close-${tradeId}`,
+        meta: { trade_id: tradeId, close_reason: closeReason, pnl }
+      });
+    } catch (_) {}
+    res.json(r);
+  } catch (err) {
+    res.status(500).json({ error: 'close_failed', message: err.message });
+  }
+});
+
+// User's active trades
+app.get('/api/signals/my-trades', verifyToken, async (req, res) => {
+  try {
+    const trades = await sigStore.getActiveTradesForUser(req.license.keyId);
+    res.json({ trades, serverTime: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: 'trades_failed', message: err.message });
+  }
+});
+
+// Notifications feed
+app.get('/api/notifications', verifyToken, async (req, res) => {
+  try {
+    const onlyUnread = req.query.unread === 'true';
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const sinceTs = req.query.since ? parseInt(req.query.since, 10) : null;
+    const notifs = await notifStore.listForUser(req.license.keyId, { onlyUnread, limit, sinceTs });
+    const unread = await notifStore.countUnread(req.license.keyId);
+    const pendingCritical = await notifStore.getPendingCritical(req.license.keyId);
+    res.json({ notifs, unread, pendingCritical, serverTime: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: 'notif_failed', message: err.message });
+  }
+});
+
+app.post('/api/notifications/read', verifyOriginMiddleware, verifyToken, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(n => parseInt(n, 10)).filter(Number.isFinite) : [];
+    const r = await notifStore.markRead(req.license.keyId, ids);
+    res.json({ ok: true, ...r });
+  } catch (err) {
+    res.status(500).json({ error: 'mark_read_failed', message: err.message });
+  }
+});
+
+app.post('/api/notifications/:id/ack', verifyOriginMiddleware, verifyToken, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ok = await notifStore.acknowledge(req.license.keyId, id);
+    res.json({ ok });
+  } catch (err) {
+    res.status(500).json({ error: 'ack_failed', message: err.message });
+  }
 });
 
 // ════════════════════════════════════════════════════
@@ -2631,6 +2808,19 @@ async function start() {
 
       // 2026-04-23: Start V44 server-side signals scheduler (runs 24/7 regardless of active users)
       try { startV44Scheduler(); } catch(e){ console.warn('[Startup] V44 scheduler error:', e.message); }
+
+      // 2026-04-25 SIGNAL SYSTEM v2 — start DB-backed generator + crons + WS server
+      try {
+        wsServer.attach(_httpServer);
+        signalGenerator.start({ onNewSignal: wsServer.onNewSignal });
+        signalCron.start({
+          onSignalExpired: wsServer.onSignalExpired,
+          onReconcileDivergence: wsServer.onReconcileDivergence
+        });
+        console.log('[Startup] Signal System v2 active (DB-backed + WS + crons)');
+      } catch(e) {
+        console.error('[Startup] Signal System v2 init failed:', e.message);
+      }
 
       // Validate APEX v42 PRO+ pair universe against live Binance exchangeInfo
       if (brokerOk) {
