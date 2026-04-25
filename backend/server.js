@@ -977,6 +977,115 @@ app.get('/api/signals/my-trades', verifyToken, async (req, res) => {
   }
 });
 
+// User's aggregate stats from server-side signal_trades — single source of truth.
+// Returns wins/losses/winRate/profitFactor/bestStreak/perSymbol/byHour computed from DB.
+// Replaces frontend localStorage stats which can be corrupted across sessions.
+app.get('/api/signals/stats', verifyToken, async (req, res) => {
+  try {
+    const keyId = req.license.keyId;
+    const sinceDays = Math.min(parseInt(req.query.days, 10) || 90, 365);
+    const sinceDate = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+    // Closed trades for user
+    const { rows: closed } = await pool.query(
+      `SELECT t.*, s.symbol, s.direction, s.confidence, s.engine_version
+         FROM signal_trades t
+         JOIN signals s ON s.signal_id = t.signal_id
+        WHERE t.key_id = $1
+          AND t.trade_state = 'CLOSED'
+          AND t.closed_at >= $2
+        ORDER BY t.closed_at ASC`,
+      [keyId, sinceDate]
+    );
+    const wins = closed.filter(t => Number(t.pnl) > 0);
+    const losses = closed.filter(t => Number(t.pnl) <= 0);
+    const grossWin = wins.reduce((s, t) => s + Number(t.pnl || 0), 0);
+    const grossLoss = Math.abs(losses.reduce((s, t) => s + Number(t.pnl || 0), 0));
+    const pf = grossLoss > 0 ? (grossWin / grossLoss) : (grossWin > 0 ? Infinity : 0);
+    const winRate = closed.length > 0 ? (wins.length / closed.length) * 100 : 0;
+    // Best streak
+    let bestStreak = 0, cur = 0;
+    for (const t of closed) {
+      if (Number(t.pnl) > 0) { cur++; if (cur > bestStreak) bestStreak = cur; }
+      else cur = 0;
+    }
+    // Per-symbol
+    const perSymbolMap = {};
+    for (const t of closed) {
+      const sym = t.symbol;
+      if (!perSymbolMap[sym]) perSymbolMap[sym] = { wins: 0, losses: 0, pnl: 0 };
+      if (Number(t.pnl) > 0) perSymbolMap[sym].wins++;
+      else perSymbolMap[sym].losses++;
+      perSymbolMap[sym].pnl += Number(t.pnl || 0);
+    }
+    const perSymbol = Object.entries(perSymbolMap).map(([sym, d]) => ({
+      symbol: sym,
+      total: d.wins + d.losses,
+      wins: d.wins,
+      losses: d.losses,
+      winRate: ((d.wins / (d.wins + d.losses)) * 100),
+      pnl: d.pnl
+    })).sort((a, b) => b.pnl - a.pnl);
+    // By UTC hour
+    const byHour = new Array(24).fill(0).map(() => ({ count: 0, pnl: 0 }));
+    for (const t of closed) {
+      const h = new Date(t.closed_at).getUTCHours();
+      byHour[h].count++;
+      byHour[h].pnl += Number(t.pnl || 0);
+    }
+    // Today's stats
+    const todayUTC = new Date(); todayUTC.setUTCHours(0, 0, 0, 0);
+    const today = closed.filter(t => new Date(t.closed_at) >= todayUTC);
+    const todayWins = today.filter(t => Number(t.pnl) > 0).length;
+    const todayLosses = today.length - todayWins;
+    res.json({
+      total: closed.length,
+      wins: wins.length,
+      losses: losses.length,
+      winRate: Number(winRate.toFixed(2)),
+      profitFactor: pf === Infinity ? null : Number(pf.toFixed(2)),
+      profitFactorInf: pf === Infinity,
+      bestStreak,
+      grossWin: Number(grossWin.toFixed(4)),
+      grossLoss: Number(grossLoss.toFixed(4)),
+      netPnl: Number((grossWin - grossLoss).toFixed(4)),
+      today: { total: today.length, wins: todayWins, losses: todayLosses },
+      perSymbol,
+      byHour,
+      sinceDays,
+      serverTime: Date.now()
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'stats_failed', message: err.message });
+  }
+});
+
+// User's signal history (closed trades) for table display.
+// Replaces localStorage `rxtrading_sighist_v70` which can be corrupted.
+app.get('/api/signals/history', verifyToken, async (req, res) => {
+  try {
+    const keyId = req.license.keyId;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 500);
+    const sinceDays = Math.min(parseInt(req.query.days, 10) || 30, 365);
+    const sinceDate = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+    const { rows } = await pool.query(
+      `SELECT t.id, t.signal_id, t.trade_state, t.mode, t.open_price, t.close_price,
+              t.close_reason, t.pnl, t.opened_at, t.closed_at,
+              s.symbol, s.direction, s.engine_version, s.confidence,
+              s.entry as signal_entry, s.tp as signal_tp, s.sl as signal_sl
+         FROM signal_trades t
+         JOIN signals s ON s.signal_id = t.signal_id
+        WHERE t.key_id = $1
+          AND t.opened_at >= $2
+        ORDER BY t.opened_at DESC
+        LIMIT $3`,
+      [keyId, sinceDate, limit]
+    );
+    res.json({ trades: rows, count: rows.length, serverTime: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: 'history_failed', message: err.message });
+  }
+});
+
 // Notifications feed
 app.get('/api/notifications', verifyToken, async (req, res) => {
   try {
