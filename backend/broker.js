@@ -299,12 +299,21 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
 
   const closeSide = side === 'BUY' ? 'SELL' : 'BUY';
 
+  // 2026-04-23 fix 1.1: unique clientOrderId per trade attempt protects against retry duplicates.
+  // Binance rejects duplicate clientOrderId → idempotent retry within 24h window.
+  // Max 36 chars, alphanumeric + underscore/dash per Binance spec.
+  const tradeCorrelationId = `rx_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
+  const entryClientOrderId = `${tradeCorrelationId}_e`.slice(0, 36);
+  const tpClientOrderId = `${tradeCorrelationId}_t`.slice(0, 36);
+  const slClientOrderId = `${tradeCorrelationId}_s`.slice(0, 36);
+
   // 1. Entry market order FIRST — get the ACTUAL fill price
   const entryParams = {
     symbol: symbol.toUpperCase(),
     side,
     type: 'MARKET',
     quantity,
+    newClientOrderId: entryClientOrderId,
     ...(positionSide && { positionSide })
   };
   const entryOrder = await binanceRequest('POST', '/fapi/v1/order', entryParams, apiKey, apiSecret, true);
@@ -320,8 +329,17 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   }
   if (!actualEntry) actualEntry = currentPrice;
   // Sanity: if slippage >5% between signal and actual, abort (market likely illiquid or dumped)
+  // 2026-04-23 fix 2.9: slippage threshold configurable per-pair.
+  // Micro-caps (1000PEPE/SHIB/etc) tienen spreads más anchos, BTC/ETH muy tight.
+  const SLIPPAGE_PER_PAIR = {
+    'BTCUSDT': 0.02, 'ETHUSDT': 0.02, 'BNBUSDT': 0.025,      // blue chips: strict 2-2.5%
+    'SOLUSDT': 0.03, 'XRPUSDT': 0.03, 'ADAUSDT': 0.035, 'LINKUSDT': 0.035,
+    'ARBUSDT': 0.04, 'POLUSDT': 0.04, 'ATOMUSDT': 0.04, 'NEARUSDT': 0.04, 'SUIUSDT': 0.04, 'TRXUSDT': 0.04, 'INJUSDT': 0.04, 'RENDERUSDT': 0.04,
+    '1000PEPEUSDT': 0.06, 'DOGEUSDT': 0.05, 'SHIBUSDT': 0.07 // memecoins: relaxed 5-7%
+  };
+  const maxSlippage = SLIPPAGE_PER_PAIR[symbol.toUpperCase()] || 0.05; // default 5%
   const slippagePct = Math.abs(actualEntry - currentPrice) / currentPrice;
-  if (slippagePct > 0.05) {
+  if (slippagePct > maxSlippage) {
     // Emergency close the position
     try {
       await binanceRequest('POST', '/fapi/v1/order', {
@@ -333,7 +351,7 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
         ...(positionSide && { positionSide })
       }, apiKey, apiSecret, true, 2);
     } catch(e) {}
-    throw new Error(`Excessive slippage ${(slippagePct*100).toFixed(2)}% — position closed for safety`);
+    throw new Error(`Excessive slippage ${(slippagePct*100).toFixed(2)}% (cap ${(maxSlippage*100).toFixed(1)}% para ${symbol}) — position closed for safety`);
   }
 
   // ═══ CRITICAL FIX: Recalculate TP/SL relative to ACTUAL entry price ═══
@@ -400,6 +418,7 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
       reduceOnly: 'true',
       workingType: 'CONTRACT_PRICE',
       priceProtect: 'true',
+      newClientOrderId: tpClientOrderId,
       ...(positionSide && { positionSide })
     }, apiKey, apiSecret, true);
   } catch (e) {
@@ -412,6 +431,7 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
         stopPrice: tpPrice,
         price: tpPrice,
         quantity,
+        newClientOrderId: `${tpClientOrderId}f`.slice(0,36),
         reduceOnly: 'true',
         timeInForce: 'GTC',
         workingType: 'CONTRACT_PRICE',
@@ -434,6 +454,7 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
       reduceOnly: 'true',
       workingType: 'CONTRACT_PRICE',
       priceProtect: 'true',
+      newClientOrderId: slClientOrderId,
       ...(positionSide && { positionSide })
     }, apiKey, apiSecret, true);
   } catch (e) {
@@ -449,6 +470,7 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
         reduceOnly: 'true',
         timeInForce: 'GTC',
         workingType: 'CONTRACT_PRICE',
+        newClientOrderId: `${slClientOrderId}f`.slice(0,36),
         ...(positionSide && { positionSide })
       }, apiKey, apiSecret, true);
     } catch (e2) {

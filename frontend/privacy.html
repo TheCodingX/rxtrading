@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Política de Privacidad — RX PRO</title>
-<meta name="description" content="Política de Privacidad de RX PRO. Datos recolectados, propósito, retención, derechos del usuario.">
+<title data-es="Política de Privacidad — RX Trading" data-en="Privacy Policy — RX Trading">Política de Privacidad — RX Trading</title>
+<meta name="description" content="Política de Privacidad de RX Trading. Datos recolectados, propósito, retención, derechos del usuario.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -24,110 +24,130 @@ a{color:#00ff41;text-decoration:none;border-bottom:1px dotted rgba(0,255,65,.4);
 a:hover{color:#FFD700;border-bottom-color:rgba(255,215,0,.6);}
 .back{display:inline-block;margin-top:40px;padding:10px 20px;background:rgba(0,255,65,.08);border:1px solid rgba(0,255,65,.35);color:#00ff41;font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;border-radius:6px;}
 .meta{margin-top:40px;padding-top:20px;border-top:1px solid rgba(255,215,0,.15);font-size:12px;color:rgba(200,240,212,.5);}
+#lang-toggle{position:fixed;top:20px;right:20px;z-index:999;background:rgba(0,255,65,.08);border:1px solid rgba(0,255,65,.4);color:#00ff41;font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;padding:8px 16px;border-radius:6px;cursor:pointer;transition:all .2s;}
+#lang-toggle:hover{background:rgba(0,255,65,.18);box-shadow:0 0 14px rgba(0,255,65,.3);}
 </style>
 </head>
 <body>
+<button id="lang-toggle" onclick="toggleLang()">EN</button>
 <div class="container">
-<h1>Política de Privacidad</h1>
-<div class="subtitle">Última actualización: 2026-04-22 · Vigente desde 2026-04-22</div>
+<h1 data-es="Política de Privacidad" data-en="Privacy Policy">Política de Privacidad</h1>
+<div class="subtitle" data-es="Última actualización: 2026-04-22 · Vigente desde 2026-04-22" data-en="Last updated: 2026-04-22 · Effective from 2026-04-22">Última actualización: 2026-04-22 · Vigente desde 2026-04-22</div>
 
-<p>En RX PRO ("nosotros", "la plataforma", "el servicio") respetamos tu privacidad. Esta política describe qué datos recolectamos, cómo los usamos y tus derechos sobre ellos.</p>
+<p data-es='En RX Trading ("nosotros", "la plataforma", "el servicio") respetamos tu privacidad. Esta política describe qué datos recolectamos, cómo los usamos y tus derechos sobre ellos.' data-en='At RX Trading ("we", "the platform", "the service") we respect your privacy. This policy describes what data we collect, how we use it, and your rights over it.'>En RX Trading ("nosotros", "la plataforma", "el servicio") respetamos tu privacidad. Esta política describe qué datos recolectamos, cómo los usamos y tus derechos sobre ellos.</p>
 
-<h2>1. Datos que recolectamos</h2>
+<h2 data-es="1. Datos que recolectamos" data-en="1. Data we collect">1. Datos que recolectamos</h2>
 
-<h3>1.1 Información de la cuenta</h3>
+<h3 data-es="1.1 Información de la cuenta" data-en="1.1 Account information">1.1 Información de la cuenta</h3>
 <ul>
-<li>Email (opcional — solo si lo proporcionás para recibir la license key y soporte)</li>
-<li>Código de licencia VIP (código único generado al pagar)</li>
-<li>Hash del fingerprint del dispositivo (para prevenir multi-activación abusiva)</li>
+<li data-es="Email (opcional — solo si lo proporcionás para recibir la license key y soporte)" data-en="Email (optional — only if you provide it to receive your license key and support)">Email (opcional — solo si lo proporcionás para recibir la license key y soporte)</li>
+<li data-es="Código de licencia VIP (código único generado al pagar)" data-en="VIP license code (unique code generated upon payment)">Código de licencia VIP (código único generado al pagar)</li>
+<li data-es="Hash del fingerprint del dispositivo (para prevenir multi-activación abusiva)" data-en="Device fingerprint hash (to prevent abusive multi-activation)">Hash del fingerprint del dispositivo (para prevenir multi-activación abusiva)</li>
 </ul>
 
-<h3>1.2 Información de trading (si conectás broker real)</h3>
+<h3 data-es="1.2 Información de trading (si conectás broker real)" data-en="1.2 Trading information (if you connect a real broker)">1.2 Información de trading (si conectás broker real)</h3>
 <ul>
-<li>API Keys de Binance Futures — <strong>encriptadas en reposo con AES-256-GCM</strong></li>
-<li>Historial de trades ejecutados (símbolo, lado, cantidad, PnL, timestamps)</li>
-<li>Balance de la cuenta en el momento de conexión</li>
+<li data-es="API Keys de Binance Futures — encriptadas en reposo con AES-256-GCM" data-en="Binance Futures API Keys — encrypted at rest with AES-256-GCM">API Keys de Binance Futures — <strong>encriptadas en reposo con AES-256-GCM</strong></li>
+<li data-es="Historial de trades ejecutados (símbolo, lado, cantidad, PnL, timestamps)" data-en="Executed trade history (symbol, side, amount, PnL, timestamps)">Historial de trades ejecutados (símbolo, lado, cantidad, PnL, timestamps)</li>
+<li data-es="Balance de la cuenta en el momento de conexión" data-en="Account balance at the time of connection">Balance de la cuenta en el momento de conexión</li>
 </ul>
 
-<h3>1.3 Información técnica</h3>
+<h3 data-es="1.3 Información técnica" data-en="1.3 Technical information">1.3 Información técnica</h3>
 <ul>
-<li>Dirección IP (anonimizada a /24 IPv4 o /64 IPv6 después de rate-limiting)</li>
-<li>User-Agent (para detectar cambio de dispositivo sospechoso)</li>
-<li>Cookies esenciales: token JWT de sesión, refresh token, preferencias UI</li>
-<li>Cookies de analytics (opcional, con tu consentimiento): Firebase Analytics</li>
+<li data-es="IP address (solo logs temporales, 30 días máx)" data-en="IP address (temporary logs only, max 30 days)">IP address (solo logs temporales, 30 días máx)</li>
+<li data-es="User-agent del navegador (para debug)" data-en="Browser user-agent (for debugging)">User-agent del navegador (para debug)</li>
+<li data-es="Timestamps de acciones (activación, trades, errores)" data-en="Action timestamps (activation, trades, errors)">Timestamps de acciones (activación, trades, errores)</li>
 </ul>
 
-<h2>2. Propósito del uso</h2>
+<h2 data-es="2. Propósito del tratamiento" data-en="2. Purpose of processing">2. Propósito del tratamiento</h2>
 <ul>
-<li><strong>Autenticación y autorización</strong>: validar que tu licencia VIP es válida y no está expirada/revocada</li>
-<li><strong>Ejecución de trades</strong>: cuando conectás Binance, usamos tus API keys para ejecutar órdenes en tu nombre (nunca para retirar fondos — el permiso de withdraw debe estar deshabilitado)</li>
-<li><strong>Soporte al cliente</strong>: tu email nos permite enviarte tu código, responder tickets y notificarte de cambios críticos</li>
-<li><strong>Mejora del producto</strong>: analytics agregados para entender uso (nunca individualizado)</li>
-<li><strong>Seguridad</strong>: detección de abuso, rate-limiting, audit log de acciones admin</li>
+<li data-es="Entregar el servicio (enviar señales, ejecutar autotrading si está activo)" data-en="Deliver the service (send signals, execute autotrading if active)">Entregar el servicio (enviar señales, ejecutar autotrading si está activo)</li>
+<li data-es="Validar tu licencia VIP y prevenir fraude" data-en="Validate your VIP license and prevent fraud">Validar tu licencia VIP y prevenir fraude</li>
+<li data-es="Auditar trades para resolución de disputas (90 días de logs)" data-en="Audit trades for dispute resolution (90-day logs)">Auditar trades para resolución de disputas (90 días de logs)</li>
+<li data-es="Mejorar el motor (análisis agregado y anonimizado de performance)" data-en="Improve the engine (aggregated and anonymized performance analysis)">Mejorar el motor (análisis agregado y anonimizado de performance)</li>
+<li data-es="Cumplir obligaciones legales si así lo requiere autoridad competente" data-en="Comply with legal obligations if required by competent authority">Cumplir obligaciones legales si así lo requiere autoridad competente</li>
 </ul>
 
-<h2>3. Retención de datos</h2>
+<h2 data-es="3. Retención" data-en="3. Retention">3. Retención</h2>
 <ul>
-<li><strong>License keys + configuración</strong>: durante la vigencia de tu suscripción + 90 días post-expiración</li>
-<li><strong>Historial de trades</strong>: 180 días rolling, después se elimina automáticamente</li>
-<li><strong>Audit logs</strong>: 90 días (requerido por auditoría interna)</li>
-<li><strong>API keys encriptadas</strong>: se eliminan permanentemente cuando desconectás el broker</li>
-<li><strong>Logs de servidor</strong>: 30 días (con IPs anonimizadas)</li>
+<li data-es="Logs de auditoría: 90 días" data-en="Audit logs: 90 days">Logs de auditoría: 90 días</li>
+<li data-es="Historial de trades: 180 días" data-en="Trade history: 180 days">Historial de trades: 180 días</li>
+<li data-es="Logs técnicos/errores: 30 días" data-en="Technical/error logs: 30 days">Logs técnicos/errores: 30 días</li>
+<li data-es="Email y licencia: hasta que pidas baja de la cuenta" data-en="Email and license: until you request account deletion">Email y licencia: hasta que pidas baja de la cuenta</li>
+<li data-es="API keys: borradas inmediatamente al desconectar broker" data-en="API keys: deleted immediately upon broker disconnection">API keys: borradas inmediatamente al desconectar broker</li>
 </ul>
 
-<h2>4. Compartición con terceros</h2>
-<p>No vendemos ni alquilamos tus datos personales. Compartimos datos mínimos con procesadores necesarios:</p>
+<h2 data-es="4. Tus derechos (GDPR / LGPD / CCPA)" data-en="4. Your rights (GDPR / LGPD / CCPA)">4. Tus derechos (GDPR / LGPD / CCPA)</h2>
 <ul>
-<li><strong>Stripe / MercadoPago / NOWPayments</strong>: procesadores de pago. Recibimos solo confirmación de pago, no los detalles de tu tarjeta</li>
-<li><strong>Binance</strong>: cuando vos mismo conectás tu cuenta. Las API keys viajan solo entre vos, nuestro backend y Binance</li>
-<li><strong>Supabase (PostgreSQL hosted)</strong>: nuestro proveedor de base de datos. Los datos están encriptados en tránsito (TLS) y en reposo</li>
-<li><strong>Render (hosting backend)</strong>: nuestro proveedor de compute. Procesa tus requests pero no persiste datos</li>
-<li><strong>Google Firebase</strong>: autenticación opcional Google Sign-In (si elegís esa opción) + analytics opt-in</li>
+<li data-es="Acceso — pedir copia de todos tus datos" data-en="Access — request a copy of all your data">Acceso — pedir copia de todos tus datos</li>
+<li data-es="Rectificación — corregir datos incorrectos" data-en="Rectification — correct inaccurate data">Rectificación — corregir datos incorrectos</li>
+<li data-es="Eliminación (derecho al olvido) — borrar tu cuenta y datos" data-en="Deletion (right to be forgotten) — delete your account and data">Eliminación (derecho al olvido) — borrar tu cuenta y datos</li>
+<li data-es="Portabilidad — exportar tus datos en JSON/CSV" data-en="Portability — export your data in JSON/CSV">Portabilidad — exportar tus datos en JSON/CSV</li>
+<li data-es="Oposición — oponerte al procesamiento (puede implicar baja del servicio)" data-en="Objection — object to processing (may imply service termination)">Oposición — oponerte al procesamiento (puede implicar baja del servicio)</li>
+<li data-es="Revocar consentimiento — en cualquier momento desde Configuración" data-en="Withdraw consent — at any time from Settings">Revocar consentimiento — en cualquier momento desde Configuración</li>
 </ul>
 
-<h2>5. Tus derechos (GDPR / LGPD / CCPA)</h2>
-<p>Tenés derecho a:</p>
+<h2 data-es="5. Compartición con terceros" data-en="5. Third-party sharing">5. Compartición con terceros</h2>
+<p data-es="RX Trading NO vende, alquila ni cede tus datos personales. Compartimos datos mínimos necesarios solo con:" data-en="RX Trading does NOT sell, rent, or assign your personal data. We share minimal necessary data only with:">RX Trading <strong>NO vende, alquila ni cede</strong> tus datos personales. Compartimos datos mínimos necesarios solo con:</p>
 <ul>
-<li><strong>Acceso</strong>: obtener copia de tus datos escribiéndonos a soporte</li>
-<li><strong>Rectificación</strong>: pedir que corrijamos datos incorrectos</li>
-<li><strong>Eliminación ("derecho al olvido")</strong>: eliminar tu cuenta y datos asociados vía email</li>
-<li><strong>Portabilidad</strong>: exportar tus datos en formato JSON</li>
-<li><strong>Oposición</strong>: desactivar cookies de analytics sin afectar funcionalidad esencial</li>
-<li><strong>Revocación de consentimiento</strong>: gestionar cookies desde el banner en landing page</li>
+<li data-es="Binance (si conectás broker real) — solo las ordenes que ejecutás" data-en="Binance (if you connect a real broker) — only the orders you execute">Binance (si conectás broker real) — solo las ordenes que ejecutás</li>
+<li data-es="Procesadores de pago (MercadoPago, Stripe, NOWPayments) — email + monto, no datos de trading" data-en="Payment processors (MercadoPago, Stripe, NOWPayments) — email + amount, no trading data">Procesadores de pago (MercadoPago, Stripe, NOWPayments) — email + monto, no datos de trading</li>
+<li data-es="Proveedor de hosting (Render) — datos en tránsito, encriptados TLS" data-en="Hosting provider (Render) — data in transit, TLS encrypted">Proveedor de hosting (Render) — datos en tránsito, encriptados TLS</li>
+<li data-es="Base de datos (Supabase) — storage encriptado AES-256" data-en="Database (Supabase) — AES-256 encrypted storage">Base de datos (Supabase) — storage encriptado AES-256</li>
 </ul>
 
-<h2>6. Seguridad</h2>
+<h2 data-es="6. Cookies" data-en="6. Cookies">6. Cookies</h2>
+<p data-es="Usamos solo cookies técnicas esenciales (sesión, preferencias de UI). No usamos cookies de tracking ni publicidad. Ver Política de Cookies completa." data-en="We use only essential technical cookies (session, UI preferences). We do not use tracking or advertising cookies. See full Cookie Policy.">Usamos solo cookies técnicas esenciales (sesión, preferencias de UI). No usamos cookies de tracking ni publicidad. Ver <a href="/cookies.html" data-es="Política de Cookies" data-en="Cookie Policy">Política de Cookies</a> completa.</p>
+
+<h2 data-es="7. Seguridad" data-en="7. Security">7. Seguridad</h2>
 <ul>
-<li>Encriptación en tránsito: TLS 1.2+ para toda comunicación</li>
-<li>Encriptación en reposo: AES-256-GCM para API keys de Binance</li>
-<li>Passwords nunca se almacenan en texto plano (usamos bcrypt con cost factor 12)</li>
-<li>JWT tokens con secret rotado regularmente</li>
-<li>Rate limiting en endpoints sensibles (auth, trading)</li>
-<li>Audit log de acciones administrativas</li>
+<li data-es="HTTPS/TLS 1.3 en todas las conexiones" data-en="HTTPS/TLS 1.3 on all connections">HTTPS/TLS 1.3 en todas las conexiones</li>
+<li data-es="API keys encriptadas AES-256-GCM en reposo" data-en="API keys encrypted AES-256-GCM at rest">API keys encriptadas AES-256-GCM en reposo</li>
+<li data-es="JWT firmado con secret rotativo" data-en="JWT signed with rotating secret">JWT firmado con secret rotativo</li>
+<li data-es="Rate limiting y detección de brute-force" data-en="Rate limiting and brute-force detection">Rate limiting y detección de brute-force</li>
+<li data-es="Auditoría regular de vulnerabilidades" data-en="Regular vulnerability auditing">Auditoría regular de vulnerabilidades</li>
 </ul>
 
-<h2>7. Menores de edad</h2>
-<p>El servicio no está disponible para menores de 18 años. Si descubrimos que hemos recolectado datos de un menor, los eliminaremos inmediatamente.</p>
+<h2 data-es="8. Menores" data-en="8. Minors">8. Menores</h2>
+<p data-es="RX Trading no está dirigido a menores de 18 años. No recolectamos datos de menores conscientemente. Si detectamos datos de un menor, los eliminamos inmediatamente." data-en="RX Trading is not directed at minors under 18. We do not knowingly collect data from minors. If we detect data from a minor, we delete it immediately.">RX Trading no está dirigido a menores de 18 años. No recolectamos datos de menores conscientemente. Si detectamos datos de un menor, los eliminamos inmediatamente.</p>
 
-<h2>8. Transferencias internacionales</h2>
-<p>Los datos pueden procesarse en servidores fuera de tu país (Estados Unidos, Europa). Los proveedores que usamos cumplen estándares GDPR-compatibles.</p>
+<h2 data-es="9. Transferencias internacionales" data-en="9. International transfers">9. Transferencias internacionales</h2>
+<p data-es="Tus datos pueden procesarse en servidores ubicados en EE.UU. (Render, Supabase). Usamos cláusulas contractuales estándar (SCC) para cumplimiento GDPR." data-en="Your data may be processed on servers located in the US (Render, Supabase). We use standard contractual clauses (SCC) for GDPR compliance.">Tus datos pueden procesarse en servidores ubicados en EE.UU. (Render, Supabase). Usamos cláusulas contractuales estándar (SCC) para cumplimiento GDPR.</p>
 
-<h2>9. Cambios a esta política</h2>
-<p>Podemos actualizar esta política. La versión vigente siempre estará en <a href="https://rxtrading.net/privacy.html">rxtrading.net/privacy.html</a>. Notificaremos cambios materiales por email a usuarios registrados con al menos 30 días de aviso.</p>
+<h2 data-es="10. Cambios a esta política" data-en="10. Changes to this policy">10. Cambios a esta política</h2>
+<p data-es="Podemos actualizar esta política. Cambios materiales se notificarán por email (si proporcionaste uno) y/o banner en la plataforma con 30 días de anticipación." data-en="We may update this policy. Material changes will be notified via email (if you provided one) and/or platform banner with 30 days notice.">Podemos actualizar esta política. Cambios materiales se notificarán por email (si proporcionaste uno) y/o banner en la plataforma con 30 días de anticipación.</p>
 
-<h2>10. Contacto</h2>
-<p>Para ejercer tus derechos, reportar incidentes o consultas generales sobre privacidad:</p>
+<h2 data-es="11. Contacto" data-en="11. Contact">11. Contacto</h2>
+<p data-es="Para ejercer tus derechos o consultas sobre privacidad:" data-en="To exercise your rights or privacy inquiries:">Para ejercer tus derechos o consultas sobre privacidad:</p>
 <ul>
-<li>Email de contacto: <a href="mailto:privacy@rxtrading.net">privacy@rxtrading.net</a></li>
-<li>Soporte general: <a href="mailto:support@rxtrading.net">support@rxtrading.net</a></li>
+<li>Email: <a href="mailto:privacy@rxtrading.net">privacy@rxtrading.net</a></li>
+<li data-es="Discord: servidor de soporte (link en la landing)" data-en="Discord: support server (link on the landing)">Discord: servidor de soporte (link en la landing)</li>
+<li data-es="Tiempo de respuesta: hasta 30 días (GDPR)" data-en="Response time: up to 30 days (GDPR)">Tiempo de respuesta: hasta 30 días (GDPR)</li>
 </ul>
 
-<div class="meta">
-<p>Al usar RX PRO aceptás esta Política de Privacidad junto con nuestros <a href="/terms.html">Términos de Servicio</a> y <a href="/cookies.html">Política de Cookies</a>.</p>
-<p>© 2026 RX PRO. Todos los derechos reservados.</p>
+<a href="/" class="back" data-es="← VOLVER A LA LANDING" data-en="← BACK TO LANDING">← VOLVER A LA LANDING</a>
+
+<div class="meta" data-es="RX Trading · Plataforma de señales de trading · Jurisdicción: Buenos Aires, Argentina" data-en="RX Trading · Trading signals platform · Jurisdiction: Buenos Aires, Argentina">RX Trading · Plataforma de señales de trading · Jurisdicción: Buenos Aires, Argentina</div>
 </div>
-
-<a href="/" class="back">← Volver al inicio</a>
-</div>
+<script>
+var currentLang = localStorage.getItem('rx_lang') || 'es';
+function applyLang(){
+  var btn = document.getElementById('lang-toggle');
+  if(btn) btn.textContent = currentLang === 'es' ? 'EN' : 'ES';
+  document.documentElement.lang = currentLang;
+  var nodes = document.querySelectorAll('[data-es][data-en]');
+  nodes.forEach(function(el){
+    var v = currentLang === 'es' ? el.getAttribute('data-es') : el.getAttribute('data-en');
+    if(el.tagName === 'TITLE') document.title = v;
+    else el.textContent = v;
+  });
+}
+function toggleLang(){
+  currentLang = currentLang === 'es' ? 'en' : 'es';
+  localStorage.setItem('rx_lang', currentLang);
+  applyLang();
+}
+applyLang();
+</script>
 </body>
 </html>

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test __tests__/",
+    "test": "node --test __tests__/smoke.test.js __tests__/v44-engine.test.js __tests__/broker.test.js",
     "test:smoke": "node --test __tests__/smoke.test.js",
     "audit": "npm audit --audit-level=moderate",
     "lint:check": "node --check server.js && node --check broker.js && node --check database.js"
@@ -23,6 +23,7 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.13.3",
-    "stripe": "^14.25.0"
+    "stripe": "^14.25.0",
+    "ws": "^8.18.0"
   }
 }

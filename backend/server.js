@@ -8,6 +8,40 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const Stripe = require('stripe');
 const { pool, initDB } = require('./database');
+const v44 = require('./v44-engine');
+const { sendRecoveryEmail } = require('./mailer');
+// 2026-04-25 Signal System v2 (server-side source of truth)
+const sigStore = require('./signal-store');
+const notifStore = require('./notification-store');
+const signalGenerator = require('./signal-generator');
+const signalCron = require('./signal-cron');
+const wsServer = require('./ws-server');
+
+// 2026-04-23 fix 2.6: decrypted broker keys cache en memoria (TTL 5min)
+// Evita timing side-channel + CPU overhead de AES-256-GCM en cada request broker.
+// Invalidado automáticamente al rotar BROKER_MASTER_KEY (el decrypt tira).
+const _brokerKeyCache = new Map(); // keyId → { apiKey, apiSecret, ts }
+const BROKER_KEY_CACHE_TTL = 5 * 60 * 1000; // 5 min
+function getBrokerKeysCached(cfg) {
+  const ent = _brokerKeyCache.get(cfg.id);
+  if (ent && Date.now() - ent.ts < BROKER_KEY_CACHE_TTL) {
+    return { apiKey: ent.apiKey, apiSecret: ent.apiSecret };
+  }
+  const apiKey = broker.decrypt(cfg.api_key_enc);
+  const apiSecret = broker.decrypt(cfg.api_secret_enc);
+  _brokerKeyCache.set(cfg.id, { apiKey, apiSecret, ts: Date.now() });
+  return { apiKey, apiSecret };
+}
+function invalidateBrokerKeyCache(cfgId) {
+  _brokerKeyCache.delete(cfgId);
+}
+// Periodic cleanup to bound memory growth
+setInterval(() => {
+  const cutoff = Date.now() - BROKER_KEY_CACHE_TTL;
+  for (const [k, v] of _brokerKeyCache.entries()) {
+    if (v.ts < cutoff) _brokerKeyCache.delete(k);
+  }
+}, 60000);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -135,12 +169,22 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), asyn
 //  GLOBAL MIDDLEWARE
 // ════════════════════════════════════════════════════
 
+// 2026-04-23 fix 2.4: per-request nonce para CSP scriptSrc
+// app.use al principio del middleware stack para que esté disponible downstream
+app.use((req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
+
 // Hardened helmet config with CSP
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://js.stripe.com", "https://www.gstatic.com", "https://*.firebaseapp.com", "https://*.firebaseio.com"],
+      // 2026-04-23: nonce-based scriptSrc. unsafe-inline se mantiene como fallback para frontend
+      // servido por Netlify (que no puede inyectar nonce). Cuando el cliente venga por el route
+      // /app con nonce-inject, el browser prefiere la nonce y ignora unsafe-inline.
+      scriptSrc: ["'self'", (req, res) => `'nonce-${res.locals.cspNonce}'`, "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://js.stripe.com", "https://www.gstatic.com", "https://*.firebaseapp.com", "https://*.firebaseio.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
@@ -485,6 +529,14 @@ async function generateVIPKeyForPayment(paymentId, planId, email, customerName) 
     [keyCode, 'completed', paymentId]
   );
 
+  // 2026-04-23 fix 4.3: audit log para cada pago completado via webhook
+  try {
+    await pool.query(
+      'INSERT INTO audit_log (actor, action, target, meta, ip, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+      ['webhook_system', 'payment_completed', `payment_id=${paymentId}`, JSON.stringify({ keyCode: keyCode.slice(-4), planId, emailMasked: (email||'').replace(/(.{2}).*(@.*)/,'$1***$2') }), null]
+    );
+  } catch(e){ /* audit_log table may not exist in old deploys — don't block payment */ }
+
   return keyCode;
 }
 
@@ -664,7 +716,7 @@ app.get('/api/keys/status', verifyToken, async (req, res) => {
 });
 
 // POST /api/keys/logout — Deactivate current session
-app.post('/api/keys/logout', verifyToken, async (req, res) => {
+app.post('/api/keys/logout', verifyOriginMiddleware, verifyToken, async (req, res) => {
   const { keyId, fp } = req.license;
 
   try {
@@ -787,6 +839,286 @@ app.get('/api/admin/metrics', verifyAdminSecret, (req, res) => {
     mode: process.env.BINANCE_TESTNET === 'true' ? 'testnet' : 'mainnet',
     ts: new Date().toISOString()
   });
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// 2026-04-25 SIGNAL SYSTEM v2 — Server-side source of truth endpoints
+// ════════════════════════════════════════════════════════════════════════
+
+// Server time — clients use this to detect clock drift and use server time for TTLs.
+app.get('/api/server/time', (req, res) => {
+  res.json({
+    serverTime: Date.now(),
+    iso: new Date().toISOString(),
+    timezone: 'UTC'
+  });
+});
+
+// Snapshot of currently ACTIVE signals (filtered by engineVersion if provided).
+// Public read (no auth) — signals are global; user-specific data is in /api/signals/my-trades.
+app.get('/api/signals/active', async (req, res) => {
+  try {
+    const engineVersion = req.query.engine || null;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const signals = await sigStore.getActiveSignals({ engineVersion, limit });
+    const { rows } = await pool.query('SELECT COALESCE(MAX(sequence_number),0) AS last_seq FROM signal_events');
+    res.json({
+      signals,
+      lastSeq: parseInt(rows[0].last_seq, 10) || 0,
+      serverTime: Date.now(),
+      engineVersion
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'snapshot_failed', message: err.message });
+  }
+});
+
+// Get signal events since lastSeq — for WS gap fill via REST (fallback).
+app.get('/api/signals/events', async (req, res) => {
+  try {
+    const sinceSeq = parseInt(req.query.sinceSeq, 10) || 0;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 1000);
+    const events = await sigStore.getEventsSince(sinceSeq, limit);
+    res.json({ events, serverTime: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: 'events_failed', message: err.message });
+  }
+});
+
+// Atomic operate: claim a signal for a user. State transition ACTIVE → TRADED is row-locked.
+// Returns { ok: true, trade } if claimed; { ok: false, reason } otherwise.
+app.post('/api/signals/:signalId/operate', verifyOriginMiddleware, verifyToken, async (req, res) => {
+  try {
+    const signalId = req.params.signalId;
+    const { mode = 'paper', openPrice } = req.body || {};
+    const keyId = req.license.keyId;
+    const r = await sigStore.openTradeForSignal({
+      signalId, keyId, mode,
+      openPrice: openPrice != null ? parseFloat(openPrice) : null,
+      meta: { client_ip: req.ip, ua: req.headers['user-agent'] || '' }
+    });
+    if (!r.ok) return res.status(409).json(r);
+    // Persist notification for trade open
+    try {
+      await notifStore.insert({
+        keyId,
+        eventType: 'trade_open',
+        severity: 'HIGH',
+        title: `Trade abierto · ${r.signal.symbol} ${r.signal.direction}`,
+        body: `Entry $${r.trade.open_price || r.signal.entry} · TP $${r.signal.tp} · SL $${r.signal.sl}`,
+        refKey: `trade-open-${r.trade.id}`,
+        meta: { signal_id: signalId, trade_id: r.trade.id, mode }
+      });
+    } catch (_) {}
+    res.json(r);
+  } catch (err) {
+    res.status(500).json({ error: 'operate_failed', message: err.message });
+  }
+});
+
+// Close a trade. Reason MANDATORY and must be a valid RX_CLOSE_REASON.
+app.post('/api/signals/trades/:tradeId/close', verifyOriginMiddleware, verifyToken, async (req, res) => {
+  try {
+    const tradeId = parseInt(req.params.tradeId, 10);
+    const { closePrice, closeReason, pnl, meta = {} } = req.body || {};
+    if (!closeReason) return res.status(400).json({ error: 'closeReason required' });
+    // Verify trade belongs to this user
+    const { rows } = await pool.query('SELECT key_id FROM signal_trades WHERE id = $1', [tradeId]);
+    if (rows.length === 0) return res.status(404).json({ error: 'trade_not_found' });
+    if (rows[0].key_id !== req.license.keyId) return res.status(403).json({ error: 'forbidden' });
+    const r = await sigStore.closeTrade({
+      tradeId,
+      closePrice: closePrice != null ? parseFloat(closePrice) : null,
+      closeReason,
+      pnl: pnl != null ? parseFloat(pnl) : null,
+      meta
+    });
+    if (!r.ok) return res.status(409).json(r);
+    // Notification
+    try {
+      const sevMap = {
+        TP_HIT: 'HIGH',
+        SL_HIT: 'HIGH',
+        SAFETY_GATE_DAILY_LOSS: 'CRITICAL',
+        SAFETY_GATE_DD: 'CRITICAL',
+        SAFETY_GATE_CIRCUIT_BREAKER: 'CRITICAL',
+        EXCHANGE_LIQUIDATION: 'CRITICAL',
+        ADMIN_OVERRIDE: 'CRITICAL',
+        RECONCILE_EXTERNAL: 'HIGH',
+        MANUAL_CLOSE: 'MEDIUM',
+        TIME_STOP: 'MEDIUM',
+        TRAILING_STOP_HIT: 'MEDIUM',
+        SIGNAL_SUPERSEDED: 'LOW'
+      };
+      const sev = sevMap[closeReason] || 'MEDIUM';
+      await notifStore.insert({
+        keyId: req.license.keyId,
+        eventType: 'trade_close',
+        severity: sev,
+        title: `Trade cerrado · ${closeReason.replace(/_/g, ' ')}`,
+        body: pnl != null ? `PnL: ${pnl >= 0 ? '+' : ''}$${Number(pnl).toFixed(2)}` : '',
+        refKey: `trade-close-${tradeId}`,
+        meta: { trade_id: tradeId, close_reason: closeReason, pnl }
+      });
+    } catch (_) {}
+    res.json(r);
+  } catch (err) {
+    res.status(500).json({ error: 'close_failed', message: err.message });
+  }
+});
+
+// User's active trades
+app.get('/api/signals/my-trades', verifyToken, async (req, res) => {
+  try {
+    const trades = await sigStore.getActiveTradesForUser(req.license.keyId);
+    res.json({ trades, serverTime: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: 'trades_failed', message: err.message });
+  }
+});
+
+// User's aggregate stats from server-side signal_trades — single source of truth.
+// Returns wins/losses/winRate/profitFactor/bestStreak/perSymbol/byHour computed from DB.
+// Replaces frontend localStorage stats which can be corrupted across sessions.
+app.get('/api/signals/stats', verifyToken, async (req, res) => {
+  try {
+    const keyId = req.license.keyId;
+    const sinceDays = Math.min(parseInt(req.query.days, 10) || 90, 365);
+    const sinceDate = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+    // Closed trades for user
+    const { rows: closed } = await pool.query(
+      `SELECT t.*, s.symbol, s.direction, s.confidence, s.engine_version
+         FROM signal_trades t
+         JOIN signals s ON s.signal_id = t.signal_id
+        WHERE t.key_id = $1
+          AND t.trade_state = 'CLOSED'
+          AND t.closed_at >= $2
+        ORDER BY t.closed_at ASC`,
+      [keyId, sinceDate]
+    );
+    const wins = closed.filter(t => Number(t.pnl) > 0);
+    const losses = closed.filter(t => Number(t.pnl) <= 0);
+    const grossWin = wins.reduce((s, t) => s + Number(t.pnl || 0), 0);
+    const grossLoss = Math.abs(losses.reduce((s, t) => s + Number(t.pnl || 0), 0));
+    const pf = grossLoss > 0 ? (grossWin / grossLoss) : (grossWin > 0 ? Infinity : 0);
+    const winRate = closed.length > 0 ? (wins.length / closed.length) * 100 : 0;
+    // Best streak
+    let bestStreak = 0, cur = 0;
+    for (const t of closed) {
+      if (Number(t.pnl) > 0) { cur++; if (cur > bestStreak) bestStreak = cur; }
+      else cur = 0;
+    }
+    // Per-symbol
+    const perSymbolMap = {};
+    for (const t of closed) {
+      const sym = t.symbol;
+      if (!perSymbolMap[sym]) perSymbolMap[sym] = { wins: 0, losses: 0, pnl: 0 };
+      if (Number(t.pnl) > 0) perSymbolMap[sym].wins++;
+      else perSymbolMap[sym].losses++;
+      perSymbolMap[sym].pnl += Number(t.pnl || 0);
+    }
+    const perSymbol = Object.entries(perSymbolMap).map(([sym, d]) => ({
+      symbol: sym,
+      total: d.wins + d.losses,
+      wins: d.wins,
+      losses: d.losses,
+      winRate: ((d.wins / (d.wins + d.losses)) * 100),
+      pnl: d.pnl
+    })).sort((a, b) => b.pnl - a.pnl);
+    // By UTC hour
+    const byHour = new Array(24).fill(0).map(() => ({ count: 0, pnl: 0 }));
+    for (const t of closed) {
+      const h = new Date(t.closed_at).getUTCHours();
+      byHour[h].count++;
+      byHour[h].pnl += Number(t.pnl || 0);
+    }
+    // Today's stats
+    const todayUTC = new Date(); todayUTC.setUTCHours(0, 0, 0, 0);
+    const today = closed.filter(t => new Date(t.closed_at) >= todayUTC);
+    const todayWins = today.filter(t => Number(t.pnl) > 0).length;
+    const todayLosses = today.length - todayWins;
+    res.json({
+      total: closed.length,
+      wins: wins.length,
+      losses: losses.length,
+      winRate: Number(winRate.toFixed(2)),
+      profitFactor: pf === Infinity ? null : Number(pf.toFixed(2)),
+      profitFactorInf: pf === Infinity,
+      bestStreak,
+      grossWin: Number(grossWin.toFixed(4)),
+      grossLoss: Number(grossLoss.toFixed(4)),
+      netPnl: Number((grossWin - grossLoss).toFixed(4)),
+      today: { total: today.length, wins: todayWins, losses: todayLosses },
+      perSymbol,
+      byHour,
+      sinceDays,
+      serverTime: Date.now()
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'stats_failed', message: err.message });
+  }
+});
+
+// User's signal history (closed trades) for table display.
+// Replaces localStorage `rxtrading_sighist_v70` which can be corrupted.
+app.get('/api/signals/history', verifyToken, async (req, res) => {
+  try {
+    const keyId = req.license.keyId;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 500);
+    const sinceDays = Math.min(parseInt(req.query.days, 10) || 30, 365);
+    const sinceDate = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+    const { rows } = await pool.query(
+      `SELECT t.id, t.signal_id, t.trade_state, t.mode, t.open_price, t.close_price,
+              t.close_reason, t.pnl, t.opened_at, t.closed_at,
+              s.symbol, s.direction, s.engine_version, s.confidence,
+              s.entry as signal_entry, s.tp as signal_tp, s.sl as signal_sl
+         FROM signal_trades t
+         JOIN signals s ON s.signal_id = t.signal_id
+        WHERE t.key_id = $1
+          AND t.opened_at >= $2
+        ORDER BY t.opened_at DESC
+        LIMIT $3`,
+      [keyId, sinceDate, limit]
+    );
+    res.json({ trades: rows, count: rows.length, serverTime: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: 'history_failed', message: err.message });
+  }
+});
+
+// Notifications feed
+app.get('/api/notifications', verifyToken, async (req, res) => {
+  try {
+    const onlyUnread = req.query.unread === 'true';
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const sinceTs = req.query.since ? parseInt(req.query.since, 10) : null;
+    const notifs = await notifStore.listForUser(req.license.keyId, { onlyUnread, limit, sinceTs });
+    const unread = await notifStore.countUnread(req.license.keyId);
+    const pendingCritical = await notifStore.getPendingCritical(req.license.keyId);
+    res.json({ notifs, unread, pendingCritical, serverTime: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: 'notif_failed', message: err.message });
+  }
+});
+
+app.post('/api/notifications/read', verifyOriginMiddleware, verifyToken, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(n => parseInt(n, 10)).filter(Number.isFinite) : [];
+    const r = await notifStore.markRead(req.license.keyId, ids);
+    res.json({ ok: true, ...r });
+  } catch (err) {
+    res.status(500).json({ error: 'mark_read_failed', message: err.message });
+  }
+});
+
+app.post('/api/notifications/:id/ack', verifyOriginMiddleware, verifyToken, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ok = await notifStore.acknowledge(req.license.keyId, id);
+    res.json({ ok });
+  } catch (err) {
+    res.status(500).json({ error: 'ack_failed', message: err.message });
+  }
 });
 
 // ════════════════════════════════════════════════════
@@ -1486,7 +1818,7 @@ app.get('/api/user/paper', syncLimiter, verifyToken, async (req, res) => {
 });
 
 // POST /api/user/paper — Save paper trading data to cloud (with optimistic concurrency versioning)
-app.post('/api/user/paper', syncLimiter, verifyToken, async (req, res) => {
+app.post('/api/user/paper', syncLimiter, verifyOriginMiddleware, verifyToken, async (req, res) => {
   const { keyId } = req.license;
   const { data, _syncVersion, _clientVersion } = req.body;
 
@@ -1538,7 +1870,7 @@ app.get('/api/user/signals', syncLimiter, verifyToken, async (req, res) => {
 });
 
 // POST /api/user/signals — Save signal history to cloud (optimistic concurrency)
-app.post('/api/user/signals', syncLimiter, verifyToken, async (req, res) => {
+app.post('/api/user/signals', syncLimiter, verifyOriginMiddleware, verifyToken, async (req, res) => {
   const { keyId } = req.license;
   const { data, _syncVersion, _clientVersion } = req.body;
 
@@ -1582,7 +1914,9 @@ app.post('/api/payments/recover-key', paymentLimiter, async (req, res) => {
     if (rows.length > 0) {
       const token = require('crypto').randomBytes(32).toString('hex');
       await pool.query('INSERT INTO recovery_tokens (email, token) VALUES ($1, $2)', [email, token]);
-      // TODO: Send email with token link (requires SMTP config)
+      // 2026-04-23 fix 2.7: pluggable email sender — SendGrid/SES/Postmark via env vars
+      try { await sendRecoveryEmail(email, token); }
+      catch(mailErr){ console.error('[Recovery] email send failed:', mailErr.message); }
       console.log('[Recovery] Token issued for', email.slice(0,3) + '***');
     }
     res.json({ ok: true, message: 'Si hay pagos asociados a este email, recibirás un link de recuperación.' });
@@ -1592,7 +1926,7 @@ app.post('/api/payments/recover-key', paymentLimiter, async (req, res) => {
 });
 
 // GDPR/CCPA — DELETE all user data (right to erasure)
-app.post('/api/user/delete-all', syncLimiter, verifyToken, async (req, res) => {
+app.post('/api/user/delete-all', syncLimiter, verifyOriginMiddleware, verifyToken, async (req, res) => {
   const { keyId } = req.license;
   const { confirm } = req.body;
   if (confirm !== 'DELETE_MY_DATA') {
@@ -1657,22 +1991,35 @@ function safeErrorMessage(err) {
   return 'Error al procesar la solicitud.';
 }
 
+// 2026-04-23 fix 3: loggear errors con stack hasheado en prod (evita leak de paths internos)
+function safeLogError(label, err, ctx){
+  const stackHash = err?.stack
+    ? crypto.createHash('sha256').update(err.stack).digest('hex').slice(0, 16)
+    : 'none';
+  const msg = String(err?.message || err || '').slice(0, 200);
+  const logObj = { msg, stackHash, ...(ctx || {}) };
+  if (process.env.NODE_ENV !== 'production') logObj.stack = err?.stack?.split('\n').slice(0,5).join(' | ');
+  console.error(label, JSON.stringify(logObj));
+}
+
 // Shared helper: check if UTC day rolled over and reset daily loss + consecutive losses
+// 2026-04-23 fix 2.1: reset diario respeta timezone del usuario (columna `user_tz` en broker_configs)
+// Default UTC si no está seteado. Evita que un trader en Buenos Aires vea su "día" resetear a las 9pm local.
 async function resetDailyLossIfNeeded(cfg) {
   try {
-    const resetAt = new Date(cfg.daily_reset_at);
-    const nowUTC = new Date();
-    const todayUTC = Date.UTC(nowUTC.getUTCFullYear(), nowUTC.getUTCMonth(), nowUTC.getUTCDate());
-    const resetAtUTC = Date.UTC(resetAt.getUTCFullYear(), resetAt.getUTCMonth(), resetAt.getUTCDate());
-    if (todayUTC > resetAtUTC) {
+    const tz = cfg.user_tz || 'UTC';
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const todayLocalStr = fmt.format(new Date());
+    const resetAtLocalStr = cfg.daily_reset_at ? fmt.format(new Date(cfg.daily_reset_at)) : '';
+    if (resetAtLocalStr !== todayLocalStr) {
       try {
-        await pool.query("UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW() AT TIME ZONE 'UTC', consecutive_losses = 0, circuit_breaker_until = NULL WHERE id = $1", [cfg.id]);
+        await pool.query("UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW(), consecutive_losses = 0, circuit_breaker_until = NULL WHERE id = $1", [cfg.id]);
       } catch (e) {
         await pool.query("UPDATE broker_configs SET daily_loss_current = 0, daily_reset_at = NOW() WHERE id = $1", [cfg.id]);
       }
       return true;
     }
-  } catch (e) { console.warn('[Broker] UTC reset check failed'); }
+  } catch (e) { console.warn('[Broker] Local TZ reset check failed:', e.message); }
   return false;
 }
 // Server-side cron-like check every hour — catches UTC rollover even if no user hits endpoints
@@ -1701,7 +2048,7 @@ const brokerLimiter = rateLimit({
 });
 
 // Connect broker: user sends API key + secret, we encrypt and store
-app.post('/api/broker/connect', verifyToken, brokerLimiter, async (req, res) => {
+app.post('/api/broker/connect', verifyOriginMiddleware, verifyToken, brokerLimiter, async (req, res) => {
   try {
     const { apiKey, apiSecret, maxPositionUsd, maxLeverage, dailyLossLimitUsd } = req.body;
     if (!apiKey || !apiSecret) return res.status(400).json({ error: 'apiKey y apiSecret requeridos' });
@@ -1717,6 +2064,18 @@ app.post('/api/broker/connect', verifyToken, brokerLimiter, async (req, res) => 
 
     if (!accountTest.canTrade) {
       return res.status(400).json({ error: 'Esta API key no tiene permiso de trading. Activá "Enable Futures" en Binance.' });
+    }
+
+    // 2026-04-23 fix 1.5: capital mínimo $1000 USDT server-side para permitir conectar broker mainnet.
+    // APEX v44 validado en backtest con $500 capital base, pero recomendamos $1000+ para absorber
+    // swings normales sin forzar ventas por margin call. Testnet exento del check.
+    const isTestnet = process.env.BINANCE_TESTNET === 'true';
+    const MIN_CAPITAL_USD = 1000;
+    const totalBal = parseFloat(accountTest.totalWalletBalance || accountTest.availableBalance || 0);
+    if (!isTestnet && !isNaN(totalBal) && totalBal < MIN_CAPITAL_USD){
+      return res.status(400).json({
+        error: `Capital insuficiente: balance $${totalBal.toFixed(2)} USDT. Mínimo requerido: $${MIN_CAPITAL_USD} USDT para conectar broker mainnet. Depositá USDT en tu Futures wallet y reintentá.`
+      });
     }
 
     const keyEnc = broker.encrypt(apiKey);
@@ -1904,8 +2263,8 @@ app.post('/api/broker/place-order', verifyOriginMiddleware, verifyToken, brokerL
     }
 
     // CRITICAL: Concurrent position limit — prevent over-leverage from rapid-fire signals
-    const apiKey = broker.decrypt(cfg.api_key_enc);
-    const apiSecret = broker.decrypt(cfg.api_secret_enc);
+    // 2026-04-23 fix 2.6: use cached decrypted keys (TTL 5min) to avoid timing side-channel + CPU overhead
+    const { apiKey, apiSecret } = getBrokerKeysCached(cfg);
 
     try {
       // TOCTOU mitigation: acquire advisory lock on key_id for duration of concurrent check + place order
@@ -1998,7 +2357,7 @@ setInterval(() => {
   for (const [k, ts] of _tradeResultCache) { if (now - ts > 5 * 60 * 1000) _tradeResultCache.delete(k); }
 }, 60000).unref?.();
 
-app.post('/api/broker/trade-result', verifyToken, brokerLimiter, async (req, res) => {
+app.post('/api/broker/trade-result', verifyOriginMiddleware, verifyToken, brokerLimiter, async (req, res) => {
   const { result, pnl, symbol, orderId } = req.body; // result: 'win' | 'loss'
   if (!['win', 'loss'].includes(result)) return res.status(400).json({ error: 'result must be win|loss' });
   // Idempotency: reject duplicate trade-result for same (keyId, orderId, result)
@@ -2132,7 +2491,7 @@ app.post('/api/broker/validate-pairs', macroLimiter, async (req, res) => {
 });
 
 // Reconcile — sync DB state with live Binance state (call after server restart or long disconnects)
-app.post('/api/broker/reconcile', verifyToken, brokerLimiter, reconcileLimiter, async (req, res) => {
+app.post('/api/broker/reconcile', verifyOriginMiddleware, verifyToken, brokerLimiter, reconcileLimiter, async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
@@ -2178,7 +2537,7 @@ app.post('/api/broker/reconcile', verifyToken, brokerLimiter, reconcileLimiter, 
 });
 
 // Close all positions (panic button)
-app.post('/api/broker/close-all', verifyToken, brokerLimiter, async (req, res) => {
+app.post('/api/broker/close-all', verifyOriginMiddleware, verifyToken, brokerLimiter, async (req, res) => {
   try {
     const { rows } = await pool.query(
       'SELECT * FROM broker_configs WHERE key_id = $1 AND is_active = 1',
@@ -2199,8 +2558,11 @@ app.post('/api/broker/close-all', verifyToken, brokerLimiter, async (req, res) =
 });
 
 // Disconnect broker (deletes encrypted keys)
-app.post('/api/broker/disconnect', verifyToken, brokerLimiter, async (req, res) => {
+app.post('/api/broker/disconnect', verifyOriginMiddleware, verifyToken, brokerLimiter, async (req, res) => {
   try {
+    // 2026-04-23 fix 2.6: invalidate key cache on disconnect so new connect uses fresh decrypt
+    const { rows } = await pool.query('SELECT id FROM broker_configs WHERE key_id = $1', [req.license.keyId]);
+    rows.forEach(r => invalidateBrokerKeyCache(r.id));
     await pool.query('DELETE FROM broker_configs WHERE key_id = $1', [req.license.keyId]);
     res.json({ ok: true });
   } catch (err) {
@@ -2343,17 +2705,19 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Required env vars validation at boot
 function validateEnv() {
+  // 2026-04-22: BROKER_MASTER_KEY is REQUIRED in prod (encryption). Webhook secrets are warnings —
+  // server boots without them, but the specific webhook endpoint rejects requests in prod.
   const required = ['JWT_SECRET', 'DATABASE_URL'];
   const recommended = ['CORS_ORIGIN'];
-  // v2.0: BROKER_MASTER_KEY REQUIRED in production (cannot encrypt broker keys without it)
-  const prodRequired = ['STRIPE_WEBHOOK_SECRET', 'NOWPAYMENTS_IPN_SECRET', 'MP_WEBHOOK_SECRET', 'BROKER_MASTER_KEY'];
+  const prodRequired = ['BROKER_MASTER_KEY'];
+  const prodRecommended = ['STRIPE_WEBHOOK_SECRET', 'NOWPAYMENTS_IPN_SECRET', 'MP_WEBHOOK_SECRET'];
   const missing = [];
   const warnings = [];
   required.forEach(k => { if (!process.env[k]) missing.push(k); });
   recommended.forEach(k => { if (!process.env[k]) warnings.push(k); });
   if (process.env.NODE_ENV === 'production') {
     prodRequired.forEach(k => { if (!process.env[k]) missing.push(`${k} (production)`); });
-    // BROKER_MASTER_KEY strict format: 64 hex chars (32 bytes)
+    prodRecommended.forEach(k => { if (!process.env[k]) warnings.push(`${k} (production — webhook will reject requests until set)`); });
     const bmk = process.env.BROKER_MASTER_KEY || '';
     if (bmk && !/^[a-f0-9]{64}$/i.test(bmk)) {
       missing.push('BROKER_MASTER_KEY (must be 64 hex chars)');
@@ -2370,6 +2734,160 @@ function validateEnv() {
   }
   return true;
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// APEX V44 LIVE SIGNALS FEED — Server-side 24/7 scanner
+// ══════════════════════════════════════════════════════════════════════
+
+const V44_SIGNAL_STORE = {
+  signals: [],       // { id, symbol, signal, entry, tp, sl, confidence, window_type, funding, funding_zscore, size_multiplier, quality_score, leverage, hold_hours, engine, created_at, expires_at }
+  lastScan: null,    // ISO timestamp of last full scan
+  lastScanResult: null, // { scanned, signals_found, window_type, reason }
+  stats: { totalScans: 0, totalSignals: 0, errors: 0 }
+};
+const V44_MAX_FEED_SIZE = 500;    // Keep last 500 signals in memory
+const V44_SCAN_INTERVAL_MS = 10 * 60 * 1000; // 10 min — V44 fires on 1h bar closes anyway
+const V44_SIGNAL_TTL_MS = 4 * 60 * 60 * 1000; // 4h hold window of V44
+// 2026-04-23 CAPITAL GUARD: dedup 4h = hold_hours del motor V44. Antes 55min → misma señal
+// podía re-insertarse a los 60min y spamear al frontend aunque el trade siguiera vivo.
+const V44_DEDUP_WINDOW_MS = 4 * 60 * 60 * 1000;
+
+function _v44Dedup(sym, signalType, entry, tp, sl){
+  const cutoff = Date.now() - V44_DEDUP_WINDOW_MS;
+  // Dedup por dirección + mismos niveles TP/SL/entry (setup idéntico)
+  // Si los niveles difieren significativamente (>0.1%), es un setup nuevo → se permite
+  return V44_SIGNAL_STORE.signals.some(s => {
+    if(s.symbol !== sym || s.signal !== signalType || s.created_at <= cutoff) return false;
+    if(entry == null || tp == null || sl == null) return true; // match básico si no hay niveles
+    const entryDrift = s.entry ? Math.abs(entry - s.entry) / s.entry : 0;
+    const tpDrift = s.tp ? Math.abs(tp - s.tp) / s.tp : 0;
+    const slDrift = s.sl ? Math.abs(sl - s.sl) / s.sl : 0;
+    return entryDrift < 0.001 && tpDrift < 0.001 && slDrift < 0.001;
+  });
+}
+
+async function _v44RunScanOnce(){
+  try {
+    const res = await v44.scanAllPairs();
+    V44_SIGNAL_STORE.lastScan = new Date().toISOString();
+    V44_SIGNAL_STORE.lastScanResult = { scanned: res.scanned, signals_found: res.signals.length, window_type: res.window_type || null, reason: res.reason };
+    V44_SIGNAL_STORE.stats.totalScans++;
+    for(const sig of res.signals){
+      if(_v44Dedup(sig.symbol, sig.signal, sig.entry, sig.tp, sig.sl)) continue;
+      const rec = {
+        id: crypto.randomBytes(6).toString('hex'),
+        ...sig,
+        created_at: Date.now(),
+        expires_at: Date.now() + V44_SIGNAL_TTL_MS
+      };
+      V44_SIGNAL_STORE.signals.push(rec);
+      V44_SIGNAL_STORE.stats.totalSignals++;
+    }
+    // Trim: keep only signals from last 24h or until cap
+    const dayAgo = Date.now() - 24*60*60*1000;
+    V44_SIGNAL_STORE.signals = V44_SIGNAL_STORE.signals.filter(s => s.created_at > dayAgo).slice(-V44_MAX_FEED_SIZE);
+    if(res.signals.length) console.log(`[V44 Scan] ${res.signals.length} new signals · window=${res.window_type}`);
+  } catch(e){
+    V44_SIGNAL_STORE.stats.errors++;
+    console.warn('[V44 Scan] error:', e.message);
+  }
+}
+
+function startV44Scheduler(){
+  // Run once on startup
+  _v44RunScanOnce();
+  // Recurring scan
+  setInterval(_v44RunScanOnce, V44_SCAN_INTERVAL_MS);
+  console.log(`[V44 Scheduler] started · scan every ${V44_SCAN_INTERVAL_MS/60000} min · universe=${v44.SAFE_FUNDING_PARAMS.UNIVERSE.length} pairs`);
+}
+
+// 2026-04-23 fix 4.5: test JWT provisioning endpoint (disabled in production unless TEST_JWT_ENABLED=true)
+// Usage en Playwright/k6: POST con { code, fingerprint } requiere body vacío y devuelve JWT pre-firmado
+// para un license key de test. Solo activo cuando NODE_ENV !== 'production' o TEST_JWT_ENABLED='true'.
+app.post('/api/test/jwt', async (req, res) => {
+  if (process.env.NODE_ENV === 'production' && process.env.TEST_JWT_ENABLED !== 'true') {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  const code = req.body?.code || process.env.TEST_LICENSE_CODE;
+  if (!code) return res.status(400).json({ error: 'code required (body.code or TEST_LICENSE_CODE env)' });
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, key_code, expires_at FROM license_keys WHERE key_code = $1 AND revoked_at IS NULL LIMIT 1',
+      [code]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'License key not found' });
+    const key = rows[0];
+    const token = jwt.sign(
+      { keyId: key.id, type: 'access', fp: 'test-harness', testJwt: true },
+      JWT_SECRET,
+      { expiresIn: '30m' }
+    );
+    res.json({ ok: true, token, keyId: key.id, expiresIn: 1800 });
+  } catch (err) {
+    res.status(500).json({ error: 'Test JWT provisioning failed' });
+  }
+});
+
+// 2026-04-23 fix 2.4: nonce-injected HTML routes
+// Alternativa strict-CSP para clientes que vienen por el backend (no Netlify).
+// Inyecta el nonce en cada <script> tag de los archivos frontend y sirve con Content-Security-Policy.
+const path = require('path');
+const fs = require('fs');
+const _htmlCache = new Map();
+const HTML_CACHE_TTL = 60 * 1000;
+function _loadHtml(filename){
+  const cached = _htmlCache.get(filename);
+  if (cached && Date.now() - cached.ts < HTML_CACHE_TTL) return cached.html;
+  const filepath = path.join(__dirname, '..', 'frontend', filename);
+  if (!fs.existsSync(filepath)) return null;
+  const html = fs.readFileSync(filepath, 'utf8');
+  _htmlCache.set(filename, { html, ts: Date.now() });
+  return html;
+}
+function _injectNonce(html, nonce){
+  return html.replace(/<script(\s[^>]*)?>/gi, (match, attrs) => {
+    if (/\snonce=/i.test(attrs || '')) return match;
+    const newAttrs = (attrs || '') + ` nonce="${nonce}"`;
+    return `<script${newAttrs}>`;
+  });
+}
+function serveFrontendWithNonce(filename){
+  return (req, res) => {
+    const html = _loadHtml(filename);
+    if (!html) return res.status(404).send('Not found');
+    const nonce = res.locals.cspNonce;
+    const injected = _injectNonce(html, nonce);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(injected);
+  };
+}
+// Opt-in nonce-protected routes (parallel to Netlify static serving).
+// Usuarios sensibles a CSP strict pueden acceder al backend directo: /strict/app.html
+app.get('/strict/app.html', serveFrontendWithNonce('app.html'));
+app.get('/strict/landing.html', serveFrontendWithNonce('landing.html'));
+app.get('/strict/privacy.html', serveFrontendWithNonce('privacy.html'));
+app.get('/strict/terms.html', serveFrontendWithNonce('terms.html'));
+app.get('/strict/cookies.html', serveFrontendWithNonce('cookies.html'));
+app.get('/strict/refund.html', serveFrontendWithNonce('refund.html'));
+
+// Public endpoint — no auth required, consumed by all clients
+app.get('/api/public-signals', (req, res) => {
+  const limit = Math.min(100, parseInt(req.query.limit, 10) || 50);
+  const since = parseInt(req.query.since, 10) || 0;
+  const pool = V44_SIGNAL_STORE.signals
+    .filter(s => s.created_at > since)
+    .slice(-limit)
+    .slice().reverse();
+  res.json({
+    signals: pool,
+    count: pool.length,
+    last_scan: V44_SIGNAL_STORE.lastScan,
+    last_result: V44_SIGNAL_STORE.lastScanResult,
+    stats: V44_SIGNAL_STORE.stats,
+    universe: v44.SAFE_FUNDING_PARAMS.UNIVERSE,
+    server_time: Date.now()
+  });
+});
 
 async function start() {
   try {
@@ -2396,6 +2914,22 @@ async function start() {
       console.log(`  ║   USDT:   ${NOWPAYMENTS_API_KEY ? 'NOWPayments OK' : 'Manual only'}          ║`);
       console.log(`  ║   Broker: ${brokerOk ? 'Binance Futures ON' : 'DISABLED'}         ║`);
       console.log(`  ╚══════════════════════════════════════╝\n`);
+
+      // 2026-04-23: Start V44 server-side signals scheduler (runs 24/7 regardless of active users)
+      try { startV44Scheduler(); } catch(e){ console.warn('[Startup] V44 scheduler error:', e.message); }
+
+      // 2026-04-25 SIGNAL SYSTEM v2 — start DB-backed generator + crons + WS server
+      try {
+        wsServer.attach(_httpServer);
+        signalGenerator.start({ onNewSignal: wsServer.onNewSignal });
+        signalCron.start({
+          onSignalExpired: wsServer.onSignalExpired,
+          onReconcileDivergence: wsServer.onReconcileDivergence
+        });
+        console.log('[Startup] Signal System v2 active (DB-backed + WS + crons)');
+      } catch(e) {
+        console.error('[Startup] Signal System v2 init failed:', e.message);
+      }
 
       // Validate APEX v42 PRO+ pair universe against live Binance exchangeInfo
       if (brokerOk) {
