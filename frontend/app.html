@@ -13453,7 +13453,10 @@ async function _runVipMultiScan(){
   _vipSigRunning = true;
   try {
     const vt = document.getElementById('vtimer');
-    if(vt) vt.textContent = '▶ Escaneando 4 pares...';
+    if(vt) {
+      const _pairCount = (typeof VIP_SCAN_SYMS !== 'undefined' && Array.isArray(VIP_SCAN_SYMS)) ? VIP_SCAN_SYMS.length : 15;
+      vt.textContent = `▶ Escaneando ${_pairCount} pares...`;
+    }
 
     // Evaluate current VIP signal for TP/SL
     evalVIPSig();
