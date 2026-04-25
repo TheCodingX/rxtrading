@@ -13007,7 +13007,7 @@ async function _runRealtimeSig(){
   _sigRunning = true;
   try {
     const el = document.getElementById('sptimer');
-    if(el) el.textContent = '&#x25B6; Analizando...';
+    if(el) el.textContent = '▶ Analizando...';
     await runSig();
     const kl = await getKlines(dSym, dTF, 280);
     if(kl && kl.length) updIndCharts(kl);
@@ -13453,7 +13453,7 @@ async function _runVipMultiScan(){
   _vipSigRunning = true;
   try {
     const vt = document.getElementById('vtimer');
-    if(vt) vt.textContent = '&#x25B6; Escaneando 4 pares...';
+    if(vt) vt.textContent = '▶ Escaneando 4 pares...';
 
     // Evaluate current VIP signal for TP/SL
     evalVIPSig();
