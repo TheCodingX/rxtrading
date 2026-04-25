@@ -9748,14 +9748,25 @@ function toHA(klines){
 // Critical: signals must NEVER run on random data. If Binance fails, return null
 // and genSig will block the signal.
 async function getKlines(sym,tf,limit=300){
+  // 2026-04-25: fapi.binance.com (futures) tiene CORS habilitado → llamada directa desde browser.
+  // Antes intentamos proxy backend pero Render está geo-bloqueado por Binance (HTTP 451).
+  // api.binance.com (spot) no tiene CORS → no usar.
   try {
-    // 2026-04-25: Browser CORS blocks api.binance.com direct calls. Backend proxy handles it (futures klines + 30s cache).
-    const apiBase = (typeof getApiBase === 'function') ? getApiBase() : '';
-    const proxyUrl = `${apiBase}/api/binance/klines?symbol=${sym}&interval=${tf}&limit=${limit}`;
-    const r = await fetch(proxyUrl);
-    if (!r.ok) return null;
-    const j = await r.json();
-    const data = j?.data;
+    const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=${limit}`;
+    const r = await fetch(url);
+    if (!r.ok) {
+      // Fallback: backend proxy (puede fallar por geo-block, pero intentamos)
+      try {
+        const apiBase = (typeof getApiBase === 'function') ? getApiBase() : '';
+        const r2 = await fetch(`${apiBase}/api/binance/klines?symbol=${sym}&interval=${tf}&limit=${limit}`);
+        if (r2.ok) {
+          const j = await r2.json();
+          if (Array.isArray(j?.data) && j.data.length) return j.data;
+        }
+      } catch(_){}
+      return null;
+    }
+    const data = await r.json();
     if (!Array.isArray(data) || data.length === 0) return null;
     return data;
   } catch(e){
