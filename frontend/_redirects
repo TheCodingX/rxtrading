@@ -1,0 +1,14 @@
+# Netlify redirects/proxies
+# 2026-04-25: route /api/* and /ws/* to Render backend so frontend can use same-origin URLs
+
+# Backend API proxy (REST)
+/api/*  https://rxtrading-1.onrender.com/api/:splat  200
+
+# WebSocket proxy
+/ws/*   https://rxtrading-1.onrender.com/ws/:splat   200
+
+# Health check passthrough
+/health https://rxtrading-1.onrender.com/health      200
+
+# SPA fallback (must be last)
+/*      /index.html                                  200

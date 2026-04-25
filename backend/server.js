@@ -2652,6 +2652,95 @@ app.get('/api/macro/spx', macroLimiter, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════
+//  PUBLIC PROXY ENDPOINTS (browser CORS workaround)
+// ════════════════════════════════════════════════════
+
+// 2026-04-25: Binance API blocks browser direct calls (CORS). Backend proxies klines.
+// Cached 30s per (symbol, interval, limit) to avoid hammering Binance + reduce latency.
+const _klinesCache = new Map();
+const KLINES_CACHE_TTL_MS = 30 * 1000;
+const KLINES_VALID_INTERVALS = new Set(['1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w','1M']);
+
+app.get('/api/binance/klines', macroLimiter, async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Cache-Control', 'public, max-age=30');
+  try {
+    const symbol = String(req.query.symbol || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const interval = String(req.query.interval || '15m');
+    const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit || '200', 10)));
+    if (!symbol || symbol.length < 5 || symbol.length > 20) {
+      return res.status(400).json({ error: 'invalid symbol' });
+    }
+    if (!KLINES_VALID_INTERVALS.has(interval)) {
+      return res.status(400).json({ error: 'invalid interval' });
+    }
+    const cacheKey = `${symbol}|${interval}|${limit}`;
+    const now = Date.now();
+    const hit = _klinesCache.get(cacheKey);
+    if (hit && (now - hit.ts) < KLINES_CACHE_TTL_MS) {
+      return res.json({ symbol, interval, limit, data: hit.data, cached: true, ageMs: now - hit.ts });
+    }
+    const isTestnet = process.env.BINANCE_TESTNET === 'true';
+    const baseUrl = isTestnet ? 'https://testnet.binancefuture.com' : 'https://fapi.binance.com';
+    const url = `${baseUrl}/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+    const fetchFn = (typeof fetch === 'function') ? fetch : require('node-fetch');
+    const r = await fetchFn(url, { headers: { 'User-Agent': 'rx-trading-backend/1.0' } });
+    if (!r.ok) {
+      const errBody = await r.text().catch(() => '');
+      return res.status(502).json({ error: 'upstream error', status: r.status, body: errBody.slice(0, 200) });
+    }
+    const data = await r.json();
+    _klinesCache.set(cacheKey, { ts: now, data });
+    // Cleanup cache if too large
+    if (_klinesCache.size > 200) {
+      const cutoff = now - KLINES_CACHE_TTL_MS;
+      for (const [k, v] of _klinesCache) if (v.ts < cutoff) _klinesCache.delete(k);
+    }
+    res.json({ symbol, interval, limit, data, cached: false });
+  } catch (err) {
+    console.warn('[BinanceProxy] klines error:', err.message);
+    res.status(500).json({ error: 'internal', message: err.message });
+  }
+});
+
+// 2026-04-25: Fear & Greed Index proxy (alternative.me free API + 5min cache).
+// Replaces unreliable corsproxy.io chain.
+let _fngCache = { ts: 0, data: null };
+const FNG_CACHE_TTL_MS = 5 * 60 * 1000;
+
+app.get('/api/macro/fng', macroLimiter, async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Cache-Control', 'public, max-age=300');
+  try {
+    const now = Date.now();
+    if (_fngCache.data && (now - _fngCache.ts) < FNG_CACHE_TTL_MS) {
+      return res.json({ ...(_fngCache.data), cached: true, ageMs: now - _fngCache.ts });
+    }
+    const fetchFn = (typeof fetch === 'function') ? fetch : require('node-fetch');
+    const r = await fetchFn('https://api.alternative.me/fng/?limit=1', { headers: { 'User-Agent': 'rx-trading-backend/1.0' } });
+    if (!r.ok) {
+      // Return stale cache if available, else empty
+      if (_fngCache.data) return res.json({ ...(_fngCache.data), stale: true, ageMs: now - _fngCache.ts });
+      return res.status(502).json({ error: 'upstream error', status: r.status });
+    }
+    const j = await r.json();
+    const d = j?.data?.[0] || null;
+    if (!d) return res.status(502).json({ error: 'no data' });
+    const out = {
+      value: parseInt(d.value, 10),
+      classification: d.value_classification,
+      ts: parseInt(d.timestamp, 10) * 1000,
+      asOf: now
+    };
+    _fngCache = { ts: now, data: out };
+    res.json({ ...out, cached: false });
+  } catch (err) {
+    if (_fngCache.data) return res.json({ ..._fngCache.data, stale: true, error: err.message });
+    res.status(500).json({ error: 'internal', message: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════
 //  START
 // ════════════════════════════════════════════════════
 

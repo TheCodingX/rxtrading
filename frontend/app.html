@@ -9735,23 +9735,14 @@ function toHA(klines){
 // and genSig will block the signal.
 async function getKlines(sym,tf,limit=300){
   try {
-    // When broker is connected, use FUTURES klines (fapi) so signals match execution prices
-    // This eliminates the spot-futures basis divergence that causes losses in real trading
-    const useFutures = _brokerStatus && _brokerStatus.connected;
-    const baseUrl = useFutures
-      ? `https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=${limit}`
-      : `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${tf}&limit=${limit}`;
-    const r = await fetch(baseUrl);
-    if(!r.ok) {
-      // Fallback to spot if futures fails
-      if(useFutures){
-        const r2 = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${tf}&limit=${limit}`);
-        if(r2.ok){ const d2 = await r2.json(); if(Array.isArray(d2) && d2.length) return d2; }
-      }
-      return null;
-    }
-    const data = await r.json();
-    if(!Array.isArray(data) || data.length === 0) return null;
+    // 2026-04-25: Browser CORS blocks api.binance.com direct calls. Backend proxy handles it (futures klines + 30s cache).
+    const apiBase = (typeof getApiBase === 'function') ? getApiBase() : '';
+    const proxyUrl = `${apiBase}/api/binance/klines?symbol=${sym}&interval=${tf}&limit=${limit}`;
+    const r = await fetch(proxyUrl);
+    if (!r.ok) return null;
+    const j = await r.json();
+    const data = j?.data;
+    if (!Array.isArray(data) || data.length === 0) return null;
     return data;
   } catch(e){
     console.warn('[getKlines] API failure for', sym, tf, e.message);
@@ -12069,7 +12060,9 @@ async function runSig(){
       // Restaurar tabla clásica para modos no-APEX
       if(tbl){ const thead = tbl.querySelector('thead'); if(thead) thead.style.display=''; }
       tbody.classList.remove('apex-live');
-      tbody.innerHTML = sig.indicators.map(i=>`<tr><td><span class="idot ${i.s}"></span><span style="font-size:10px">${i.n}</span></td><td style="color:var(--tm)">${i.v}</td><td><span class="isig ${i.s}">${i.s}</span></td></tr>`).join('');
+      // 2026-04-25: defensive — sig.indicators puede ser undefined si la senal viene del v2 stream sin indicators legacy
+      const _inds = Array.isArray(sig.indicators) ? sig.indicators : [];
+      tbody.innerHTML = _inds.map(i=>`<tr><td><span class="idot ${i.s}"></span><span style="font-size:10px">${i.n}</span></td><td style="color:var(--tm)">${i.v}</td><td><span class="isig ${i.s}">${i.s}</span></td></tr>`).join('');
     }
   })();
   if(sig.signal!=='NEUTRAL'){sigH.unshift({...sig,time:new Date().toLocaleTimeString()});if(sigH.length>12)sigH.pop();updSigH();toast(`SEÑAL ${sig.signal} — ${dSym} (${sig.confidence}%)`);playSignalBeep(sig.signal);triggerSignalAlert(sig.symbol,sig.signal,sig.confidence,mainDashboardMode);recordSignal(sig.symbol,sig.signal,sig.confidence,sig.entry,sig.tp||sig.entry,sig.sl||sig.entry,mainDashboardMode,sig._aisContext);autoTradeFromSignal(sig.symbol,sig.signal,sig.confidence,sig.entry,sig.tp,sig.sl,mainDashboardMode);}
@@ -12200,11 +12193,13 @@ function updateSignalExplanation(sig) {
   const gatesEl = document.getElementById('sig-expl-gates');
   const typeEl = document.getElementById('sig-expl-type');
 
+  // 2026-04-25: defensive — fallback a [] si vienen del stream v2 sin indicators legacy
+  const _sigInds = Array.isArray(sig.indicators) ? sig.indicators : [];
   if(sig.signal === 'NEUTRAL') {
     card.style.display = 'block';
     card.style.borderColor = 'rgba(136,136,136,.2)';
-    const buyInds = sig.indicators.filter(i => i.s === 'BUY');
-    const sellInds = sig.indicators.filter(i => i.s === 'SELL');
+    const buyInds = _sigInds.filter(i => i.s === 'BUY');
+    const sellInds = _sigInds.filter(i => i.s === 'SELL');
     const minPts = sig._minScore || 5;
     sentenceEl.innerHTML = '<span style="color:var(--neu)">Sin confluencia suficiente</span> — ' +
       '<span style="color:#00ff41">' + buyInds.length + '</span> indicadores BUY vs ' +
@@ -12213,7 +12208,7 @@ function updateSignalExplanation(sig) {
     sentenceEl.style.borderLeftColor = 'var(--neu)';
 
     // Show indicator pills
-    indsEl.innerHTML = sig.indicators.map(i => {
+    indsEl.innerHTML = _sigInds.map(i => {
       const col = i.s === 'BUY' ? '#00ff41' : i.s === 'SELL' ? '#ff3a3a' : 'var(--neu)';
       return '<span style="font-size:9px;padding:2px 6px;border-radius:3px;border:1px solid ' + col + '30;color:' + col + ';background:' + col + '10;font-family:Orbitron,monospace">' + i.n + '</span>';
     }).join('');
@@ -12232,7 +12227,7 @@ function updateSignalExplanation(sig) {
   card.style.borderColor = sigColor + '30';
 
   // Build explanation sentence
-  const agreeing = sig.indicators.filter(i => i.s === sig.signal);
+  const agreeing = _sigInds.filter(i => i.s === sig.signal);
   const parts = agreeing.map(i => {
     // Try to extract points from known weights
     let pts = '';
@@ -12259,9 +12254,9 @@ function updateSignalExplanation(sig) {
   sentenceEl.style.borderLeftColor = sigColor;
 
   // Show indicator agreement pills
-  const buyInds = sig.indicators.filter(i => i.s === 'BUY');
-  const sellInds = sig.indicators.filter(i => i.s === 'SELL');
-  const neuInds = sig.indicators.filter(i => i.s === 'NEUTRAL');
+  const buyInds = _sigInds.filter(i => i.s === 'BUY');
+  const sellInds = _sigInds.filter(i => i.s === 'SELL');
+  const neuInds = _sigInds.filter(i => i.s === 'NEUTRAL');
   indsEl.innerHTML =
     '<span style="font-size:9px;padding:2px 8px;border-radius:3px;background:rgba(0,255,65,.12);color:#00ff41;border:1px solid rgba(0,255,65,.25);font-family:Orbitron,monospace">' + buyInds.length + ' BUY</span>' +
     '<span style="font-size:9px;padding:2px 8px;border-radius:3px;background:rgba(136,136,136,.12);color:var(--neu);border:1px solid rgba(136,136,136,.25);font-family:Orbitron,monospace">' + neuInds.length + ' NEUTRAL</span>' +
@@ -13678,7 +13673,8 @@ function updVIPSig(sig){
   {const _f=Math.round(sig.confidence/10);document.getElementById('vsbars').innerHTML=Array.from({length:10},(_,i)=>'<div class="sb '+(i<_f?'on '+sig.signal:'')+'"></div>').join('');}
 
   if(sig.entry){document.getElementById('ven').textContent='$'+fP(sig.entry,sig.symbol);if(sig.tp)document.getElementById('vtp').textContent='$'+fP(sig.tp,sig.symbol);if(sig.sl)document.getElementById('vsl').textContent='$'+fP(sig.sl,sig.symbol);if(sig.tp&&sig.sl)document.getElementById('vrr').textContent='1:'+(Math.abs(sig.tp-sig.entry)/Math.abs(sig.sl-sig.entry)).toFixed(2);document.getElementById('ren2').value=sig.entry.toFixed(2);if(sig.sl)document.getElementById('rsl2').value=sig.sl.toFixed(2);calcRisk();}
-  const pp=document.getElementById('vipills');if(pp)pp.innerHTML=sig.indicators.slice(0,12).map(i=>`<div class="ipill"><span class="ipn">${i.n}</span><span class="ipv" style="color:${i.s==='BUY'?'#00ff41':i.s==='SELL'?'#ff3a3a':'var(--neu)'}">${i.v}</span></div>`).join('');
+  // 2026-04-25: defensive — sig.indicators puede venir undefined desde stream v2
+  const pp=document.getElementById('vipills');if(pp){const _vipInds=Array.isArray(sig.indicators)?sig.indicators:[];pp.innerHTML=_vipInds.slice(0,12).map(i=>`<div class="ipill"><span class="ipn">${i.n}</span><span class="ipv" style="color:${i.s==='BUY'?'#00ff41':i.s==='SELL'?'#ff3a3a':'var(--neu)'}">${i.v}</span></div>`).join('');}
   updateSignalExplanation(sig);
   // Save last non-NEUTRAL signal time for this symbol+mode
   if(sig.signal !== 'NEUTRAL' && sig.symbol) {
@@ -14531,21 +14527,16 @@ setInterval(()=>{if(document.getElementById('market').classList.contains('on'))u
 
 async function quickFearGreed(){
   let v=null;
-  const fngUrl='https://api.alternative.me/fng/?limit=1';
-  const proxies=[
-    'https://api.allorigins.win/raw?url='+encodeURIComponent(fngUrl),
-    'https://corsproxy.io/?'+encodeURIComponent(fngUrl),
-    'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(fngUrl),
-    fngUrl
-  ];
-  for(const purl of proxies){
-    try{
-      const r=await fetch(purl,{signal:AbortSignal.timeout(4000)});
-      if(!r.ok) continue;
-      const fng=await r.json();
-      if(fng&&fng.data&&fng.data[0]){v=parseInt(fng.data[0].value);if(v&&v>0&&v<=100)break;v=null;}
-    }catch(e){continue;}
-  }
+  // 2026-04-25: backend proxy /api/macro/fng (cached 5min, replaces flaky corsproxy chain)
+  try {
+    const apiBase = (typeof getApiBase === 'function') ? getApiBase() : '';
+    const r = await fetch(apiBase + '/api/macro/fng', { signal: AbortSignal.timeout(5000) });
+    if (r.ok) {
+      const j = await r.json();
+      const x = parseInt(j?.value);
+      if (x > 0 && x <= 100) v = x;
+    }
+  } catch(_){}
   if(!v) v=Math.floor(Math.random()*40)+40;
   const el=document.getElementById('fgval'),lbl=document.getElementById('fglbl'),nd=document.getElementById('gneedle');
   if(el) {
@@ -24902,7 +24893,11 @@ document.addEventListener('keydown', (e) => {
       if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
         return 'http://' + host + ':3001';
       }
-      // Production / staging: same origin
+      // 2026-04-25: Netlify (frontend) + Render (backend) → cross-origin to Render
+      if (host === 'rxtrading.net' || host === 'www.rxtrading.net') {
+        return 'https://rxtrading-1.onrender.com';
+      }
+      // Same-origin fallback (custom deployments)
       return location.origin;
     } catch (_) { return ''; }
   }
