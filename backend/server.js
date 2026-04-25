@@ -2682,33 +2682,75 @@ app.get('/api/binance/klines', macroLimiter, async (req, res) => {
     }
     const isTestnet = process.env.BINANCE_TESTNET === 'true';
     const baseUrl = isTestnet ? 'https://testnet.binancefuture.com' : 'https://fapi.binance.com';
-    const url = `${baseUrl}/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
     const fetchFn = (typeof fetch === 'function') ? fetch : require('node-fetch');
+    const BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    const fetchOpts = { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' } };
     let data = null;
+    let source = null;
+
+    // 1. Binance fapi (mejor calidad, falla por 451 desde Render mainnet)
     try {
-      const r = await fetchFn(url, { headers: { 'User-Agent': 'rx-trading-backend/1.0' } });
-      if (r.ok) data = await r.json();
+      const r = await fetchFn(`${baseUrl}/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`, fetchOpts);
+      if (r.ok) {
+        const j = await r.json();
+        if (Array.isArray(j) && j.length > 0) { data = j; source = 'binance-fapi'; }
+      }
     } catch(_){}
-    // 2026-04-25: Render IP geo-bloqueada por Binance (HTTP 451). Bybit fallback.
-    if (!data || !Array.isArray(data) || data.length === 0) {
+
+    // 2. OKX perpetual swap (no geo-block)
+    if (!data) {
       try {
-        const bbInterval = ({ '1m':'1','3m':'3','5m':'5','15m':'15','30m':'30','1h':'60','2h':'120','4h':'240','6h':'360','12h':'720','1d':'D','1w':'W','1M':'M' })[interval] || interval;
-        const bybitR = await fetchFn(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=${bbInterval}&limit=${Math.min(limit, 1000)}`);
-        if (bybitR.ok) {
-          const bj = await bybitR.json();
-          const list = bj?.result?.list;
-          if (Array.isArray(list) && list.length > 0) {
-            // Map Bybit format → Binance kline format: [openTime, open, high, low, close, volume, closeTime, quoteAssetVolume, ...]
-            // Bybit: [openTime, open, high, low, close, volume, turnover] — newest first → reverse
-            data = list.map(k => [parseInt(k[0]), k[1], k[2], k[3], k[4], k[5], parseInt(k[0]) + 60000, k[6], 0, '0', '0', '0']).reverse();
+        const okxBar = ({ '1m':'1m','3m':'3m','5m':'5m','15m':'15m','30m':'30m','1h':'1H','2h':'2H','4h':'4H','6h':'6H','12h':'12H','1d':'1D','1w':'1W','1M':'1M' })[interval] || interval;
+        const okxSym = symbol.endsWith('USDT') ? `${symbol.slice(0, -4)}-USDT-SWAP` : symbol;
+        const r = await fetchFn(`https://www.okx.com/api/v5/market/candles?instId=${okxSym}&bar=${okxBar}&limit=${Math.min(limit, 300)}`, fetchOpts);
+        if (r.ok) {
+          const j = await r.json();
+          const arr = j?.data;
+          if (Array.isArray(arr) && arr.length > 0) {
+            // OKX: [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm] — newest first → reverse + map to Binance kline format
+            data = arr.map(k => [parseInt(k[0]), k[1], k[2], k[3], k[4], k[5], parseInt(k[0]) + 3600000, k[7], 0, '0', '0', '0']).reverse();
+            source = 'okx';
           }
         }
       } catch(_){}
     }
-    if (!data || !Array.isArray(data) || data.length === 0) {
-      return res.status(502).json({ error: 'upstream error', source: 'binance+bybit_failed' });
+
+    // 3. Bybit linear futures
+    if (!data) {
+      try {
+        const bbInt = ({ '1m':'1','3m':'3','5m':'5','15m':'15','30m':'30','1h':'60','2h':'120','4h':'240','6h':'360','12h':'720','1d':'D','1w':'W','1M':'M' })[interval] || interval;
+        const r = await fetchFn(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=${bbInt}&limit=${Math.min(limit, 1000)}`, fetchOpts);
+        if (r.ok) {
+          const j = await r.json();
+          const list = j?.result?.list;
+          if (Array.isArray(list) && list.length > 0) {
+            data = list.map(k => [parseInt(k[0]), k[1], k[2], k[3], k[4], k[5], parseInt(k[0]) + 60000, k[6], 0, '0', '0', '0']).reverse();
+            source = 'bybit';
+          }
+        }
+      } catch(_){}
     }
-    _klinesCache.set(cacheKey, { ts: now, data });
+
+    // 4. CryptoCompare (último fallback universal)
+    if (!data && symbol.endsWith('USDT') && interval === '1h') {
+      try {
+        const base = symbol.slice(0, -4);
+        const r = await fetchFn(`https://min-api.cryptocompare.com/data/v2/histohour?fsym=${base}&tsym=USDT&limit=${Math.min(limit, 2000)}`, fetchOpts);
+        if (r.ok) {
+          const j = await r.json();
+          const arr = j?.Data?.Data;
+          if (Array.isArray(arr) && arr.length > 0) {
+            data = arr.map(k => [parseInt(k.time) * 1000, String(k.open), String(k.high), String(k.low), String(k.close), String(k.volumefrom), parseInt(k.time) * 1000 + 3600000, String(k.volumeto), 0, '0', '0', '0']);
+            source = 'cryptocompare';
+          }
+        }
+      } catch(_){}
+    }
+
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return res.status(502).json({ error: 'upstream error', source: 'all_fallbacks_failed' });
+    }
+    _klinesCache.set(cacheKey, { ts: now, data, source });
     // Cleanup cache if too large
     if (_klinesCache.size > 200) {
       const cutoff = now - KLINES_CACHE_TTL_MS;

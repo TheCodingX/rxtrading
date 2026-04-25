@@ -163,26 +163,64 @@ async function fetchBars1h(symbol, limit = 800){
     if(!Array.isArray(arr) || arr.length === 0) return null;
     return arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
   };
-  // 2026-04-25: orden de fallbacks ajustado por geo-blocking de Binance desde Render (HTTP 451).
-  // Bybit es primary porque NO geo-bloquea Render. Binance fapi/spot quedan como fallback (funcionan desde browsers).
-  // Bybit returns newest-first, normalizo a oldest-first.
+  // 2026-04-25: cadena de fallbacks por geo-blocking de Binance desde Render (HTTP 451).
+  // Browser-like UA porque algunos exchanges bloquean default node fetch UA.
+  const BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  const fetchOpts = { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' } };
+
+  // 1. Binance fapi (mejor calidad, falla por 451 desde Render)
   try {
-    const r = await fetch(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=60&limit=${Math.min(limit, 1000)}`);
+    const r = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}`, fetchOpts);
+    if (r.ok) {
+      const arr = await r.json();
+      if (Array.isArray(arr) && arr.length > 0) {
+        return arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
+      }
+    }
+  } catch(e){}
+
+  // 2. OKX (perpetual swap, no geo-block desde US/EU)
+  try {
+    const okxSym = symbol.endsWith('USDT') ? `${symbol.slice(0, -4)}-USDT-SWAP` : symbol;
+    const r = await fetch(`https://www.okx.com/api/v5/market/candles?instId=${okxSym}&bar=1H&limit=${Math.min(limit, 300)}`, fetchOpts);
+    if (r.ok) {
+      const j = await r.json();
+      const arr = j?.data;
+      if (Array.isArray(arr) && arr.length > 0) {
+        // OKX: [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm] — newest first
+        return arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) })).reverse();
+      }
+    }
+  } catch(e){}
+
+  // 3. Bybit (funciona desde algunas regiones, no todas)
+  try {
+    const r = await fetch(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=60&limit=${Math.min(limit, 1000)}`, fetchOpts);
     if (r.ok) {
       const j = await r.json();
       const list = j?.result?.list;
       if (Array.isArray(list) && list.length > 0) {
-        // Bybit: [openTime, open, high, low, close, volume, turnover] — newest first
         return list.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) })).reverse();
       }
     }
   } catch(e){}
-  // fapi (Binance Futures) — funciona si NO está geo-bloqueado
+
+  // 4. CryptoCompare (universal, fallback final)
   try {
-    const bars = await tryFetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}`);
-    if(bars) return bars;
+    if (symbol.endsWith('USDT')) {
+      const base = symbol.slice(0, -4);
+      const r = await fetch(`https://min-api.cryptocompare.com/data/v2/histohour?fsym=${base}&tsym=USDT&limit=${Math.min(limit, 2000)}`, fetchOpts);
+      if (r.ok) {
+        const j = await r.json();
+        const arr = j?.Data?.Data;
+        if (Array.isArray(arr) && arr.length > 0) {
+          return arr.map(k => ({ t: parseInt(k.time) * 1000, c: parseFloat(k.close) }));
+        }
+      }
+    }
   } catch(e){}
-  // spot fallback
+
+  // 5. Binance spot fallback (último intento)
   try {
     const bars = await tryFetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=${limit}`);
     if(bars) return bars;
