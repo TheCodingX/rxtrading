@@ -163,7 +163,21 @@ async function fetchBars1h(symbol, limit = 800){
     if(!Array.isArray(arr) || arr.length === 0) return null;
     return arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
   };
-  // fapi (Binance Futures)
+  // 2026-04-25: orden de fallbacks ajustado por geo-blocking de Binance desde Render (HTTP 451).
+  // Bybit es primary porque NO geo-bloquea Render. Binance fapi/spot quedan como fallback (funcionan desde browsers).
+  // Bybit returns newest-first, normalizo a oldest-first.
+  try {
+    const r = await fetch(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=60&limit=${Math.min(limit, 1000)}`);
+    if (r.ok) {
+      const j = await r.json();
+      const list = j?.result?.list;
+      if (Array.isArray(list) && list.length > 0) {
+        // Bybit: [openTime, open, high, low, close, volume, turnover] — newest first
+        return list.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) })).reverse();
+      }
+    }
+  } catch(e){}
+  // fapi (Binance Futures) — funciona si NO está geo-bloqueado
   try {
     const bars = await tryFetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}`);
     if(bars) return bars;

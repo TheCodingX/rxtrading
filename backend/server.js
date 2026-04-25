@@ -2684,12 +2684,30 @@ app.get('/api/binance/klines', macroLimiter, async (req, res) => {
     const baseUrl = isTestnet ? 'https://testnet.binancefuture.com' : 'https://fapi.binance.com';
     const url = `${baseUrl}/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
     const fetchFn = (typeof fetch === 'function') ? fetch : require('node-fetch');
-    const r = await fetchFn(url, { headers: { 'User-Agent': 'rx-trading-backend/1.0' } });
-    if (!r.ok) {
-      const errBody = await r.text().catch(() => '');
-      return res.status(502).json({ error: 'upstream error', status: r.status, body: errBody.slice(0, 200) });
+    let data = null;
+    try {
+      const r = await fetchFn(url, { headers: { 'User-Agent': 'rx-trading-backend/1.0' } });
+      if (r.ok) data = await r.json();
+    } catch(_){}
+    // 2026-04-25: Render IP geo-bloqueada por Binance (HTTP 451). Bybit fallback.
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      try {
+        const bbInterval = ({ '1m':'1','3m':'3','5m':'5','15m':'15','30m':'30','1h':'60','2h':'120','4h':'240','6h':'360','12h':'720','1d':'D','1w':'W','1M':'M' })[interval] || interval;
+        const bybitR = await fetchFn(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=${bbInterval}&limit=${Math.min(limit, 1000)}`);
+        if (bybitR.ok) {
+          const bj = await bybitR.json();
+          const list = bj?.result?.list;
+          if (Array.isArray(list) && list.length > 0) {
+            // Map Bybit format → Binance kline format: [openTime, open, high, low, close, volume, closeTime, quoteAssetVolume, ...]
+            // Bybit: [openTime, open, high, low, close, volume, turnover] — newest first → reverse
+            data = list.map(k => [parseInt(k[0]), k[1], k[2], k[3], k[4], k[5], parseInt(k[0]) + 60000, k[6], 0, '0', '0', '0']).reverse();
+          }
+        }
+      } catch(_){}
     }
-    const data = await r.json();
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return res.status(502).json({ error: 'upstream error', source: 'binance+bybit_failed' });
+    }
     _klinesCache.set(cacheKey, { ts: now, data });
     // Cleanup cache if too large
     if (_klinesCache.size > 200) {
