@@ -4040,6 +4040,20 @@ body.is-vip-mode #CR {
             </div>
           </div>
 
+          <!-- PROMO: Autotrading Real -->
+          <div style="margin:20px 0 8px;padding:16px 18px;border-radius:12px;background:linear-gradient(135deg,rgba(255,215,0,.1),rgba(255,140,0,.03));border:1px solid rgba(255,215,0,.35);position:relative;overflow:hidden;">
+            <div style="position:absolute;top:0;right:0;padding:3px 10px;background:linear-gradient(135deg,#FFD700,#FF8C00);color:#000;font-family:'Orbitron',monospace;font-size:8px;font-weight:900;letter-spacing:1.5px;border-bottom-left-radius:10px;">NUEVO</div>
+            <div style="display:flex;align-items:center;gap:12px;text-align:left;">
+              <div style="flex-shrink:0;width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,rgba(255,215,0,.25),rgba(255,140,0,.1));border:1px solid rgba(255,215,0,.5);display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(255,215,0,.2);">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              </div>
+              <div style="flex:1;">
+                <div style="font-family:'Orbitron',monospace;font-size:10px;font-weight:900;color:#FFD700;letter-spacing:1.2px;text-shadow:0 0 10px rgba(255,215,0,.5);">AUTOTRADING REAL EN BINANCE</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,215,0,.7);margin-top:3px;line-height:1.5;">Conectá tu cuenta y las señales se ejecutan solas con TP/SL exactos. Sin copiar, sin delay.</div>
+              </div>
+            </div>
+          </div>
+
           <!-- LIVE SIGNAL DEMO -->
           <div style="margin:24px 0 16px;padding:12px;border-radius:12px;background:linear-gradient(135deg,rgba(255,215,0,.04),rgba(255,140,0,.02));border:1px solid rgba(255,215,0,.2);position:relative;overflow:visible;">
             <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--g),transparent);animation:goldLine 2.5s ease-in-out infinite;"></div>
@@ -11781,7 +11795,7 @@ async function genSig(sym, tf, mode = 'frequent') {
       signal._apexFixedPct = true;
     }
 
-  } else {
+  } else if(isBinance) {
     // ══════════════════════════════════════════════════════════
     // MOTOR 3: FREE v14 — Motor Scalp mejorado pero limitado
     // CAMBIOS v14 vs v12:
@@ -18673,6 +18687,348 @@ function _renderResultsBacktest(trades, initCap, motor, days) {
           min: Math.min(...equityArr) * 0.95,
           max: Math.max(...equityArr) * 1.05
         }
+      }
+    }
+  });
+}
+
+// ═══ RESULTADOS section (v14) — Public backtest for all users ═══
+let _resultsSelectedMotor = 'scalp';
+let _resultsSelectedDays = 30;
+let _resultsChart = null;
+let _resultsRunning = false;
+
+function selectResultsMotor(btn, motor) {
+  _resultsSelectedMotor = motor;
+  document.querySelectorAll('[data-res-motor]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function selectResultsDays(btn, days) {
+  _resultsSelectedDays = days;
+  document.querySelectorAll('[data-res-days]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function runResultsBacktest() {
+  if (_resultsRunning) { toast(t('Backtest ya en ejecución...')); return; }
+  _resultsRunning = true;
+
+  const motor = _resultsSelectedMotor;
+  const days = _resultsSelectedDays;
+  const initCap = 10000;
+  const tradeAmt = 500;
+  const lev = 5;
+
+  const pairs = motor === 'binance' ? BINANCE_SCAN_SYMS
+              : motor === 'scalp' ? SCALP_SCAN_SYMS
+              : motor === 'strict' ? VIP_SCAN_SYMS
+              : ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT'];
+  const cdBars = motor === 'binance' ? 12 : motor === 'scalp' ? 12 : motor === 'strict' ? 36 : 60;
+  const cdMs = cdBars * 5 * 60 * 1000;
+
+  const progWrap = document.getElementById('rc-progress');
+  const progLabel = document.getElementById('rc-progress-label');
+  const progPct = document.getElementById('rc-progress-pct');
+  const progBar = document.getElementById('rc-progress-bar');
+  const runBtn = document.getElementById('rc-run-btn');
+  if (progWrap) progWrap.style.display = 'block';
+  if (runBtn) { runBtn.disabled = true; runBtn.style.opacity = '.5'; }
+  if (progLabel) progLabel.textContent = t('Descargando datos de Binance...');
+  if (progBar) progBar.style.width = '5%';
+  if (progPct) progPct.textContent = '5%';
+
+  // v14: RESET all result UI (stats + chart) BEFORE running new backtest
+  // Prevents stale data from previous runs showing mixed with new.
+  try {
+    const _rcRet = document.getElementById('rc-return');
+    if (_rcRet) { _rcRet.textContent = '—'; _rcRet.style.color = '#00ff41'; }
+    ['rc-wr','rc-pf','rc-dd','rc-trades','rc-avgratio','rc-win-pct','rc-loss-pct','rc-wins','rc-losses'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = id === 'rc-wins' ? '0 WINS' : id === 'rc-losses' ? '0 LOSSES' : '—';
+    });
+    const _wlWin = document.getElementById('rc-wl-win');
+    const _wlLoss = document.getElementById('rc-wl-loss');
+    if (_wlWin) _wlWin.style.width = '50%';
+    if (_wlLoss) _wlLoss.style.width = '50%';
+    const _sum = document.getElementById('rc-summary');
+    if (_sum) _sum.textContent = t('Procesando señales') + '...';
+    // Fully destroy any existing chart on the results canvas
+    const _canvas = document.getElementById('rc-equity-canvas');
+    if (_canvas) {
+      if (_resultsChart) { try { _resultsChart.destroy(); } catch(e) {} _resultsChart = null; }
+      const existing = Chart.getChart(_canvas);
+      if (existing) { try { existing.destroy(); } catch(e) {} }
+      // Clear canvas surface
+      const cctx = _canvas.getContext('2d');
+      cctx.clearRect(0, 0, _canvas.width, _canvas.height);
+    }
+  } catch(e) {}
+
+  try {
+    const endTime = Date.now();
+    const startTime = endTime - days * 24 * 60 * 60 * 1000;
+    const allData = {};
+
+    let downloaded = 0;
+    await Promise.all(pairs.map(async (sym) => {
+      try {
+        const need5 = days * 288;
+        let kl5 = [];
+        let endT5 = endTime;
+        while (kl5.length < need5) {
+          const limit = Math.min(1000, need5 - kl5.length);
+          const url5 = `https://api.binance.com/api/v3/klines?symbol=${sym}&interval=5m&limit=${limit}&endTime=${endT5}`;
+          const r = await fetch(url5);
+          const batch = await r.json();
+          if (!Array.isArray(batch) || batch.length === 0) break;
+          kl5 = batch.concat(kl5);
+          if (batch[0][0] <= startTime) break;
+          endT5 = batch[0][0] - 1;
+        }
+        kl5 = kl5.filter(k => k[0] >= startTime && k[0] <= endTime);
+
+        const [r15, r1h] = await Promise.all([
+          fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=15m&limit=1000`),
+          fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=1h&limit=500`)
+        ]);
+        const kl15 = await r15.json();
+        const kl1h = await r1h.json();
+
+        allData[sym] = { kl5, kl15, kl1h };
+        downloaded++;
+        const dlPct = 5 + Math.round((downloaded / pairs.length) * 45);
+        if (progBar) progBar.style.width = dlPct + '%';
+        if (progPct) progPct.textContent = dlPct + '%';
+        if (progLabel) progLabel.textContent = t('Descargando datos') + ': ' + downloaded + '/' + pairs.length + ' ' + t('pares');
+      } catch (e) {
+        console.error('Download error', sym, e);
+      }
+    }));
+
+    if (progLabel) progLabel.textContent = t('Procesando señales') + ' (' + motor + ')...';
+
+    const trades = [];
+    let processed = 0;
+    const totalBars = Object.values(allData).reduce((s, d) => s + (d.kl5 ? d.kl5.length : 0), 0);
+
+    for (const sym of pairs) {
+      const data = allData[sym];
+      if (!data || !data.kl5 || data.kl5.length < 300) continue;
+      const { kl5, kl15, kl1h } = data;
+      let lastSigTime = 0;
+      const lb5 = 280, lb15 = 100, lb1h = 50;
+
+      for (let i = lb5; i < kl5.length; i++) {
+        const barTime = parseInt(kl5[i][0]);
+        if (barTime - lastSigTime < cdMs) continue;
+        processed++;
+        if (processed % 2000 === 0) {
+          const pct = 50 + Math.round((processed / totalBars) * 45);
+          if (progBar) progBar.style.width = pct + '%';
+          if (progPct) progPct.textContent = pct + '%';
+          await new Promise(r => setTimeout(r, 0));
+        }
+
+        const sig = await _runGenSigOnSlice(sym, motor,
+          kl5.slice(Math.max(0, i - lb5), i + 1),
+          kl15.filter(k => parseInt(k[0]) <= barTime).slice(-lb15),
+          kl1h.filter(k => parseInt(k[0]) <= barTime).slice(-lb1h));
+
+        if (!sig || sig.signal === 'NEUTRAL') continue;
+        lastSigTime = barTime;
+
+        const entry = sig.entry, tp = sig.tp, sl = sig.sl;
+        if (!entry || !tp || !sl) continue;
+
+        let result = null, exitPrice = entry;
+        for (let j = i + 1; j < kl5.length && j < i + 200; j++) {
+          const cH = parseFloat(kl5[j][2]);
+          const cL = parseFloat(kl5[j][3]);
+          const cO = parseFloat(kl5[j][1]);
+          if (sig.signal === 'BUY') {
+            const tpHit = cH >= tp;
+            const slHit = cL <= sl;
+            if (tpHit && slHit) {
+              if (Math.abs(cO - sl) < Math.abs(cO - tp)) { result = 'LOSS'; exitPrice = sl; }
+              else { result = 'WIN'; exitPrice = tp; }
+              break;
+            }
+            if (tpHit) { result = 'WIN'; exitPrice = tp; break; }
+            if (slHit) { result = 'LOSS'; exitPrice = sl; break; }
+          } else {
+            const tpHit = cL <= tp;
+            const slHit = cH >= sl;
+            if (tpHit && slHit) {
+              if (Math.abs(cO - sl) < Math.abs(cO - tp)) { result = 'LOSS'; exitPrice = sl; }
+              else { result = 'WIN'; exitPrice = tp; }
+              break;
+            }
+            if (tpHit) { result = 'WIN'; exitPrice = tp; break; }
+            if (slHit) { result = 'LOSS'; exitPrice = sl; break; }
+          }
+        }
+        if (!result) continue;
+
+        const pctMove = sig.signal === 'BUY' ? (exitPrice - entry) / entry : (entry - exitPrice) / entry;
+        const pnl = tradeAmt * lev * pctMove;
+        trades.push({ sym, signal: sig.signal, pnl, result, time: barTime });
+      }
+    }
+
+    trades.sort((a, b) => a.time - b.time);
+
+    if (progLabel) progLabel.textContent = t('Calculando estadísticas') + '...';
+    if (progBar) progBar.style.width = '98%';
+    if (progPct) progPct.textContent = '98%';
+    await new Promise(r => setTimeout(r, 100));
+
+    _renderResultsBacktest(trades, initCap, motor, days);
+
+    if (progBar) progBar.style.width = '100%';
+    if (progPct) progPct.textContent = '100%';
+    if (progLabel) progLabel.textContent = '✓ ' + t('Backtest completado') + ' — ' + trades.length + ' trades';
+    setTimeout(() => { if (progWrap) progWrap.style.display = 'none'; }, 2000);
+    toast(t('Backtest completado') + ': ' + trades.length + ' trades');
+  } catch (e) {
+    console.error('Backtest error:', e);
+    toast(t('Error en backtest') + ': ' + e.message);
+    if (progLabel) progLabel.textContent = '✗ ' + e.message;
+  } finally {
+    _resultsRunning = false;
+    if (runBtn) { runBtn.disabled = false; runBtn.style.opacity = '1'; }
+  }
+}
+
+function _renderResultsBacktest(trades, initCap, motor, days) {
+  const canvas = document.getElementById('rc-equity-canvas');
+  if (!canvas) return;
+
+  if (trades.length === 0) {
+    document.getElementById('rc-return').textContent = '0%';
+    document.getElementById('rc-wr').textContent = '—';
+    document.getElementById('rc-pf').textContent = '—';
+    document.getElementById('rc-dd').textContent = '0%';
+    document.getElementById('rc-trades').textContent = '0';
+    document.getElementById('rc-avgratio').textContent = '—';
+    document.getElementById('rc-summary').textContent = t('Sin señales generadas en este período');
+    if (_resultsChart) { _resultsChart.destroy(); _resultsChart = null; }
+    return;
+  }
+
+  let wins = 0, losses = 0, grossProfit = 0, grossLoss = 0;
+  let cumPnl = 0;
+  const equityArr = [initCap];
+  const timeLabels = [''];
+  let peak = initCap, maxDD = 0;
+
+  trades.forEach(tr => {
+    cumPnl += tr.pnl;
+    const eq = initCap + cumPnl;
+    equityArr.push(eq);
+    const d = new Date(tr.time);
+    timeLabels.push(d.toLocaleDateString('es', { month: 'short', day: 'numeric' }));
+    if (tr.pnl > 0) { wins++; grossProfit += tr.pnl; }
+    else { losses++; grossLoss += Math.abs(tr.pnl); }
+    if (eq > peak) peak = eq;
+    const dd = (peak - eq) / peak * 100;
+    if (dd > maxDD) maxDD = dd;
+  });
+
+  const totalReturnPct = (cumPnl / initCap * 100).toFixed(1);
+  const winRate = trades.length > 0 ? (wins / trades.length * 100).toFixed(1) : '0';
+  const profitFactor = grossLoss > 0 ? (grossProfit / grossLoss).toFixed(2) : grossProfit > 0 ? '∞' : '0.00';
+  const avgWin = wins > 0 ? (grossProfit / wins) : 0;
+  const avgLoss = losses > 0 ? (grossLoss / losses) : 0;
+  const ratio = avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : avgWin > 0 ? '∞' : '0';
+
+  const retEl = document.getElementById('rc-return');
+  retEl.textContent = (cumPnl >= 0 ? '+' : '') + '$' + Math.round(cumPnl).toLocaleString() + ' (' + (cumPnl >= 0 ? '+' : '') + totalReturnPct + '%)';
+  retEl.style.color = cumPnl >= 0 ? '#00ff41' : '#ff3a3a';
+
+  document.getElementById('rc-wr').textContent = winRate + '%';
+  document.getElementById('rc-pf').textContent = profitFactor;
+  document.getElementById('rc-dd').textContent = '-' + maxDD.toFixed(1) + '%';
+  document.getElementById('rc-trades').textContent = trades.length.toLocaleString();
+  document.getElementById('rc-avgratio').textContent = '$' + avgWin.toFixed(1) + ' / $' + avgLoss.toFixed(1) + ' (' + ratio + ':1)';
+
+  const winPct = trades.length > 0 ? (wins / trades.length * 100) : 0;
+  const lossPct = 100 - winPct;
+  document.getElementById('rc-win-pct').textContent = winPct.toFixed(0) + '%';
+  document.getElementById('rc-loss-pct').textContent = lossPct.toFixed(0) + '%';
+  document.getElementById('rc-wl-win').style.width = winPct + '%';
+  document.getElementById('rc-wl-loss').style.width = lossPct + '%';
+  document.getElementById('rc-wins').textContent = wins + ' WINS';
+  document.getElementById('rc-losses').textContent = losses + ' LOSSES';
+  const motorLabel = motor === 'scalp' ? t('Precisión Institucional')
+                   : motor === 'strict' ? t('Safe Mode')
+                   : t('Alta Frecuencia');
+  document.getElementById('rc-summary').textContent = motorLabel + ' · ' + days + 'd · $' + initCap.toLocaleString() + ' → $' + Math.round(initCap + cumPnl).toLocaleString();
+
+  // v14: fully destroy any existing chart on this canvas (even orphaned ones)
+  try {
+    if (_resultsChart) { _resultsChart.destroy(); _resultsChart = null; }
+    const existing = Chart.getChart(canvas);
+    if (existing) existing.destroy();
+  } catch(e) {}
+  // Reset canvas dimensions so chart.js can size fresh
+  const parent = canvas.parentElement;
+  if (parent) {
+    canvas.style.width = '100%';
+    canvas.style.height = '260px';
+    canvas.width = parent.clientWidth;
+    canvas.height = 260;
+  }
+  const ctx = canvas.getContext('2d');
+  const gradientFill = ctx.createLinearGradient(0, 0, 0, 260);
+  if (cumPnl >= 0) {
+    gradientFill.addColorStop(0, 'rgba(0,255,65,.18)');
+    gradientFill.addColorStop(1, 'rgba(0,255,65,0)');
+  } else {
+    gradientFill.addColorStop(0, 'rgba(255,58,58,.18)');
+    gradientFill.addColorStop(1, 'rgba(255,58,58,0)');
+  }
+
+  const motorColor = motor === 'scalp' ? '#FFD700'
+                  : motor === 'strict' ? '#00d4ff'
+                  : '#00ff41';
+
+  _resultsChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: timeLabels,
+      datasets: [{
+        data: equityArr,
+        borderColor: cumPnl >= 0 ? motorColor : '#ff3a3a',
+        borderWidth: 2.5,
+        fill: true,
+        backgroundColor: gradientFill,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        tension: 0.35
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(0,0,0,.88)',
+          borderColor: 'rgba(255,215,0,.3)',
+          borderWidth: 1,
+          titleFont: { family: 'Orbitron', size: 9 },
+          bodyFont: { family: 'JetBrains Mono', size: 11 },
+          titleColor: 'rgba(255,215,0,.8)',
+          bodyColor: '#fff',
+          padding: 12,
+          callbacks: { label: (c) => 'Equity: $' + c.parsed.y.toFixed(0) }
+        }
+      },
+      scales: {
+        x: { display: true, grid: { color: 'rgba(255,215,0,.03)' }, ticks: { color: 'rgba(255,215,0,.3)', font: { size: 9 }, maxTicksLimit: 8, maxRotation: 0 } },
+        y: { display: true, grid: { color: 'rgba(255,215,0,.05)' }, ticks: { color: 'rgba(255,215,0,.4)', font: { size: 9 }, callback: (v) => '$' + (v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v.toFixed(0)) } }
       }
     }
   });
