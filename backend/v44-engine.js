@@ -654,31 +654,79 @@ function evaluateFundingCarry(pair, bars1h){
 }
 
 // Fetch 1h klines from Binance Futures (preferred) with spot fallback
+// 2026-04-27: bug fix — el chain hacía short-circuit en primer fallback no-null.
+// OKX cap=300 retornaba 300 bars y nunca se probaban Bybit/CryptoCompare que pueden dar 800+.
+// Fix: probar TODAS las fuentes, retornar la que tenga más bars (o min suficiente).
 async function fetchBars1h(symbol, limit = 800){
-  const tryFetch = async (url) => {
-    const r = await fetch(url);
-    if(!r.ok) return null;
-    const arr = await r.json();
-    if(!Array.isArray(arr) || arr.length === 0) return null;
-    return arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
-  };
-  // 2026-04-25: cadena de fallbacks por geo-blocking de Binance desde Render (HTTP 451).
   // Browser-like UA porque algunos exchanges bloquean default node fetch UA.
   const BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   const fetchOpts = { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' } };
+  const REQUIRED_MIN = Math.min(limit, 770); // V44 z-score lookback necesita ≥770
 
-  // 1. Binance fapi (mejor calidad, falla por 451 desde Render)
+  // Helper: si ya tenemos bars suficientes, no seguir probando
+  let best = null;
+  const considerCandidate = (bars, source) => {
+    if (!bars || bars.length === 0) return false;
+    if (!best || bars.length > best.length) best = bars;
+    return bars.length >= REQUIRED_MIN; // true = suficiente, podemos parar
+  };
+
+  // 1. Binance fapi (mejor calidad, falla 451 desde Render — pero si funciona, da ≤1500)
   try {
     const r = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}`, fetchOpts);
     if (r.ok) {
       const arr = await r.json();
       if (Array.isArray(arr) && arr.length > 0) {
-        return arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
+        const bars = arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
+        if (considerCandidate(bars, 'fapi')) return bars;
       }
     }
   } catch(e){}
 
-  // 2. OKX (perpetual swap, no geo-block desde US/EU)
+  // 2. Bybit linear perp (limit=1000 — debería dar 800 sin problema)
+  try {
+    const r = await fetch(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=60&limit=${Math.min(limit, 1000)}`, fetchOpts);
+    if (r.ok) {
+      const j = await r.json();
+      const list = j?.result?.list;
+      if (Array.isArray(list) && list.length > 0) {
+        const bars = list.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) })).reverse();
+        if (considerCandidate(bars, 'bybit')) return bars;
+      }
+    }
+  } catch(e){}
+
+  // 3. CryptoCompare (universal, limit hasta 2000 — siempre debería suplir)
+  try {
+    if (symbol.endsWith('USDT')) {
+      const base = symbol.slice(0, -4);
+      // Normalizar 1000PEPE/1000SHIB → PEPE/SHIB (CryptoCompare no usa 1000-prefix)
+      const ccBase = base.startsWith('1000') ? base.slice(4) : base;
+      const r = await fetch(`https://min-api.cryptocompare.com/data/v2/histohour?fsym=${ccBase}&tsym=USDT&limit=${Math.min(limit, 2000)}`, fetchOpts);
+      if (r.ok) {
+        const j = await r.json();
+        const arr = j?.Data?.Data;
+        if (Array.isArray(arr) && arr.length > 0) {
+          const bars = arr.map(k => ({ t: parseInt(k.time) * 1000, c: parseFloat(k.close) }));
+          if (considerCandidate(bars, 'cryptocompare')) return bars;
+        }
+      }
+    }
+  } catch(e){}
+
+  // 4. Binance spot fallback (limit hasta 1000 — funciona desde casi todas las regiones)
+  try {
+    const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=${Math.min(limit, 1000)}`, fetchOpts);
+    if (r.ok) {
+      const arr = await r.json();
+      if (Array.isArray(arr) && arr.length > 0) {
+        const bars = arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
+        if (considerCandidate(bars, 'binance-spot')) return bars;
+      }
+    }
+  } catch(e){}
+
+  // 5. OKX (last resort, cap=300 — solo si todo lo anterior falló)
   try {
     const okxSym = symbol.endsWith('USDT') ? `${symbol.slice(0, -4)}-USDT-SWAP` : symbol;
     const r = await fetch(`https://www.okx.com/api/v5/market/candles?instId=${okxSym}&bar=1H&limit=${Math.min(limit, 300)}`, fetchOpts);
@@ -686,45 +734,14 @@ async function fetchBars1h(symbol, limit = 800){
       const j = await r.json();
       const arr = j?.data;
       if (Array.isArray(arr) && arr.length > 0) {
-        // OKX: [ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm] — newest first
-        return arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) })).reverse();
+        const bars = arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) })).reverse();
+        considerCandidate(bars, 'okx');
       }
     }
   } catch(e){}
 
-  // 3. Bybit (funciona desde algunas regiones, no todas)
-  try {
-    const r = await fetch(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=60&limit=${Math.min(limit, 1000)}`, fetchOpts);
-    if (r.ok) {
-      const j = await r.json();
-      const list = j?.result?.list;
-      if (Array.isArray(list) && list.length > 0) {
-        return list.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) })).reverse();
-      }
-    }
-  } catch(e){}
-
-  // 4. CryptoCompare (universal, fallback final)
-  try {
-    if (symbol.endsWith('USDT')) {
-      const base = symbol.slice(0, -4);
-      const r = await fetch(`https://min-api.cryptocompare.com/data/v2/histohour?fsym=${base}&tsym=USDT&limit=${Math.min(limit, 2000)}`, fetchOpts);
-      if (r.ok) {
-        const j = await r.json();
-        const arr = j?.Data?.Data;
-        if (Array.isArray(arr) && arr.length > 0) {
-          return arr.map(k => ({ t: parseInt(k.time) * 1000, c: parseFloat(k.close) }));
-        }
-      }
-    }
-  } catch(e){}
-
-  // 5. Binance spot fallback (último intento)
-  try {
-    const bars = await tryFetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=${limit}`);
-    if(bars) return bars;
-  } catch(e){}
-  return null;
+  // Retornar el mejor candidato encontrado (puede ser <REQUIRED pero al menos no null)
+  return best;
 }
 
 // Scan all pairs in the validated universe. Returns array of signals (non-null only).
