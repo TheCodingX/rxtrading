@@ -338,6 +338,28 @@ async function closeTrade({ tradeId, closePrice, closeReason, pnl, meta = {} }) 
   if (upd.rows.length === 0) {
     return { ok: false, reason: 'trade_not_open_or_not_found' };
   }
+  // V44.5 PALANCA 11: Feed pair-stats tracker for rolling PF computation
+  // Look up the signal to get the pair, then record this closed trade.
+  try {
+    const trade = upd.rows[0];
+    const sig = await pool.query(
+      'SELECT symbol FROM signals WHERE signal_id = $1 LIMIT 1',
+      [trade.signal_id]
+    );
+    if (sig.rows.length > 0) {
+      const v44Engine = require('./v44-engine');
+      if (typeof v44Engine.recordTradeForPairStats === 'function') {
+        v44Engine.recordTradeForPairStats(
+          sig.rows[0].symbol,
+          new Date(trade.closed_at).getTime(),
+          parseFloat(pnl)
+        );
+      }
+    }
+  } catch (e) {
+    // Non-fatal — pair stats feeding is opportunistic
+    console.error('[V45] recordTradeForPairStats failed:', e.message);
+  }
   return { ok: true, trade: upd.rows[0] };
 }
 

@@ -862,18 +862,41 @@ app.get('/api/v44/diag', async (req, res) => {
     const hr = new Date().getUTCHours();
     const eligible = v44.isEligibleHour(hr);
     const nextWindow = v44.findNextEligibleHour(hr);
-    // Test fetch on BTC to see if Binance reachable
-    let fetchTest = { ok: false, source: null, bars: 0, err: null };
+    // Test fetch on BTC with REAL production limit (800 bars). If <770, evaluateFundingCarry returns null silently.
+    const REQUIRED_BARS = v44.SAFE_FUNDING_PARAMS.Z_LOOKBACK_H + 50;
+    let fetchTest = { ok: false, bars: 0, latencyMs: 0, sufficient: false, required: REQUIRED_BARS, err: null };
     try {
       const t0 = Date.now();
-      const bars = await v44.fetchBars1h('BTCUSDT', 100);
-      fetchTest = { ok: !!(bars && bars.length > 0), bars: bars?.length || 0, latencyMs: Date.now() - t0 };
+      const bars = await v44.fetchBars1h('BTCUSDT', 800);
+      fetchTest = {
+        ok: !!(bars && bars.length > 0),
+        bars: bars?.length || 0,
+        latencyMs: Date.now() - t0,
+        sufficient: !!(bars && bars.length >= REQUIRED_BARS),
+        required: REQUIRED_BARS,
+        firstTs: bars?.[0]?.t || null,
+        lastTs: bars?.[bars.length-1]?.t || null
+      };
     } catch(e){ fetchTest.err = e.message; }
-    // Check if generator running by looking at last scan attempt
+    // Live evaluateFundingCarry test on BTC to see if signal would be generated
+    let evalTest = { tested: false, result: null, err: null };
+    if (eligible && fetchTest.sufficient) {
+      try {
+        const bars = await v44.fetchBars1h('BTCUSDT', 800);
+        const sig = v44.evaluateFundingCarry('BTCUSDT', bars);
+        evalTest = { tested: true, result: sig === null ? 'NEUTRAL_or_null' : { signal: sig.signal, confidence: sig.confidence, fz: sig.funding_zscore } };
+      } catch(e){ evalTest.err = e.message; }
+    }
+    // Check if generator running by looking at last scan attempt + signal counts
     let lastSignalAttempt = null;
+    let totalSignalsAllTime = 0;
+    let totalEventsAllTime = 0;
     try {
-      const r = await pool.query('SELECT MAX(created_at) AS last_signal FROM signals');
+      const r = await pool.query('SELECT MAX(created_at) AS last_signal, COUNT(*)::int AS total FROM signals');
       lastSignalAttempt = r.rows[0]?.last_signal;
+      totalSignalsAllTime = r.rows[0]?.total || 0;
+      const r2 = await pool.query('SELECT COUNT(*)::int AS total FROM signal_events');
+      totalEventsAllTime = r2.rows[0]?.total || 0;
     } catch(e){}
     res.json({
       utcHour: hr,
@@ -885,10 +908,17 @@ app.get('/api/v44/diag', async (req, res) => {
         V45_TERM_STRUCTURE: v44.SAFE_FUNDING_PARAMS.V45_TERM_STRUCTURE_ENABLED,
         V46_R3_MAKER: v44.SAFE_FUNDING_PARAMS.V46_R3_MAKER_PRIORITY,
         V46_R5_WINDOW: v44.SAFE_FUNDING_PARAMS.V46_R5_WINDOW_WEIGHTS,
-        V46_R6_CORR: v44.SAFE_FUNDING_PARAMS.V46_R6_CORR_DAMPENER
+        V46_R6_CORR: v44.SAFE_FUNDING_PARAMS.V46_R6_CORR_DAMPENER,
+        V46_T6_BAYESIAN: v44.SAFE_FUNDING_PARAMS.V46_T6_BAYESIAN,
+        V46_T5_HAWKES: v44.SAFE_FUNDING_PARAMS.V46_T5_HAWKES
       },
       binance_fetch_test: fetchTest,
-      lastSignalCreatedAt: lastSignalAttempt
+      eval_test: evalTest,
+      db_stats: {
+        totalSignalsAllTime,
+        totalEventsAllTime,
+        lastSignalCreatedAt: lastSignalAttempt
+      }
     });
   } catch (err) {
     res.status(500).json({ error: 'diag_failed', message: err.message });
