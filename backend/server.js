@@ -854,6 +854,58 @@ app.get('/api/server/time', (req, res) => {
   });
 });
 
+// Public diagnostic — V44/V46 engine state + last scan info
+// No auth — reports system health, used to debug why signals aren't being generated
+app.get('/api/v44/diag', async (req, res) => {
+  try {
+    const v44 = require('./v44-engine');
+    const hr = new Date().getUTCHours();
+    const eligible = v44.isEligibleHour(hr);
+    const nextWindow = v44.findNextEligibleHour(hr);
+    // Test fetch on BTC to see if Binance reachable
+    let fetchTest = { ok: false, source: null, bars: 0, err: null };
+    try {
+      const t0 = Date.now();
+      const bars = await v44.fetchBars1h('BTCUSDT', 100);
+      fetchTest = { ok: !!(bars && bars.length > 0), bars: bars?.length || 0, latencyMs: Date.now() - t0 };
+    } catch(e){ fetchTest.err = e.message; }
+    // Check if generator running by looking at last scan attempt
+    let lastSignalAttempt = null;
+    try {
+      const r = await pool.query('SELECT MAX(created_at) AS last_signal FROM signals');
+      lastSignalAttempt = r.rows[0]?.last_signal;
+    } catch(e){}
+    res.json({
+      utcHour: hr,
+      eligibleNow: eligible,
+      nextEligibleHourUTC: nextWindow,
+      universe: v44.SAFE_FUNDING_PARAMS.UNIVERSE.length,
+      flags: {
+        V45_PAIR_SIZING: v44.SAFE_FUNDING_PARAMS.V45_PAIR_SIZING_ENABLED,
+        V45_TERM_STRUCTURE: v44.SAFE_FUNDING_PARAMS.V45_TERM_STRUCTURE_ENABLED,
+        V46_R3_MAKER: v44.SAFE_FUNDING_PARAMS.V46_R3_MAKER_PRIORITY,
+        V46_R5_WINDOW: v44.SAFE_FUNDING_PARAMS.V46_R5_WINDOW_WEIGHTS,
+        V46_R6_CORR: v44.SAFE_FUNDING_PARAMS.V46_R6_CORR_DAMPENER
+      },
+      binance_fetch_test: fetchTest,
+      lastSignalCreatedAt: lastSignalAttempt
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'diag_failed', message: err.message });
+  }
+});
+
+// Force a scan cycle now (for testing) — admin only
+app.post('/api/admin/v44/force-scan', verifyAdminSecret, async (req, res) => {
+  try {
+    const sigGen = require('./signal-generator');
+    const result = await sigGen.runScanCycle();
+    res.json({ ok: true, result, ts: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: 'force_scan_failed', message: err.message });
+  }
+});
+
 // Snapshot of currently ACTIVE signals (filtered by engineVersion if provided).
 // Public read (no auth) — signals are global; user-specific data is in /api/signals/my-trades.
 app.get('/api/signals/active', async (req, res) => {

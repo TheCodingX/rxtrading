@@ -21,7 +21,11 @@ const HOLD_HOURS = parseInt(process.env.V44_HOLD_HOURS || '4', 10); // V44 hold 
 const TTL_MS = HOLD_HOURS * 60 * 60 * 1000;
 const ADVISORY_LOCK_KEY = 0x52585353; // 'RXSS' (RX Signal Store generator)
 
-const ENGINE_VERSION = process.env.SIGNAL_ENGINE_VERSION || 'apex-v44-funding-carry-1.0';
+// 2026-04-27 V44.6 deploy: bump engine version when T6+T5 flags active so DB rows
+// reflect the actual engine that produced them (audit + rollback traceability).
+const _v46_active = process.env.APEX_V46_T6 === '1' && process.env.APEX_V46_T5 === '1';
+const ENGINE_VERSION = process.env.SIGNAL_ENGINE_VERSION ||
+  (_v46_active ? 'apex-v44.6-funding-carry-bayes-hawkes-1.0' : 'apex-v44-funding-carry-1.0');
 
 let _timer = null;
 let _running = false;
