@@ -79,6 +79,15 @@ async function runScanCycle() {
       } else {
         console.log(`[SignalGen]   no pair passed filters this cycle (z<threshold or funding not extreme)`);
       }
+      // 2026-04-28: log insufficient/errored pairs to detect OKX rate limit issues
+      if (scan.insufficient_pairs && scan.insufficient_pairs.length > 0) {
+        const list = scan.insufficient_pairs.map(p => `${p.sym}:${p.bars}`).join(',');
+        console.warn(`[SignalGen] ${scan.insufficient_pairs.length} pairs with insufficient bars: ${list}`);
+      }
+      if (scan.errored_pairs && scan.errored_pairs.length > 0) {
+        const list = scan.errored_pairs.map(p => `${p.sym}:${p.err}`).join(' | ');
+        console.warn(`[SignalGen] ${scan.errored_pairs.length} pairs errored: ${list}`);
+      }
     }
 
     for (const sig of (scan.signals || [])) {

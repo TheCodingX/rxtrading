@@ -754,12 +754,37 @@ async function fetchBars1h(symbol, limit = 800){
       } catch(e){}
 
       // Paginated history-candles with after=<oldestTs> (= older than ts). Max 100 per call.
-      const MAX_HIST_CALLS = 8; // 8 × 100 = 800 + initial 300 = 1100 bars max
+      // 2026-04-28: throttle 150ms between calls to avoid OKX rate limit when scanAllPairs
+      // runs 15 pairs in parallel via Promise.all (15 × 7 calls = 105 simultaneous = throttled)
+      const MAX_HIST_CALLS = 8;
+      const PAGINATION_DELAY_MS = 150;
       for (let i = 0; i < MAX_HIST_CALLS && collected.length < limit + 100 && oldestTs; i++){
+        if (i > 0) {
+          // Small jittered delay to spread load across parallel pairs (avoids burst)
+          await new Promise(r => setTimeout(r, PAGINATION_DELAY_MS + Math.floor(Math.random() * 100)));
+        }
         try {
           const url = `https://www.okx.com/api/v5/market/history-candles?instId=${okxSym}&bar=1H&after=${oldestTs}&limit=100`;
           const r = await fetch(url, fetchOpts);
-          if (!r.ok) break;
+          if (!r.ok) {
+            // 429 or 503: backoff harder and retry once
+            if (r.status === 429 || r.status === 503) {
+              await new Promise(rs => setTimeout(rs, 800 + Math.floor(Math.random() * 400)));
+              const r2 = await fetch(url, fetchOpts);
+              if (!r2.ok) break;
+              const j2 = await r2.json();
+              const arr2 = j2?.data;
+              if (!Array.isArray(arr2) || arr2.length === 0) break;
+              const batch2 = arr2.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
+              collected.push(...batch2);
+              const newOldest2 = batch2[batch2.length - 1].t;
+              if (newOldest2 >= oldestTs) break;
+              oldestTs = newOldest2;
+              if (batch2.length < 100) break;
+              continue;
+            }
+            break;
+          }
           const j = await r.json();
           const arr = j?.data;
           if (!Array.isArray(arr) || arr.length === 0) break;
@@ -829,21 +854,49 @@ async function fetchBars1h(symbol, limit = 800){
 }
 
 // Scan all pairs in the validated universe. Returns array of signals (non-null only).
+// 2026-04-28: process pairs in chunks of 3 to avoid OKX rate limit when paginating
+// (15 pairs × 7 OKX calls each = 105 simultaneous = throttled if all parallel).
+// Chunks of 3 = ~21 simultaneous calls, fits within OKX limits comfortably.
 async function scanAllPairs(){
   const p = SAFE_FUNDING_PARAMS;
   const hr = new Date().getUTCHours();
   if(!isEligibleHour(hr)){
     return { scanned: 0, signals: [], reason: 'outside_window', next_window_utc: findNextEligibleHour(hr) };
   }
-  const results = await Promise.all(p.UNIVERSE.map(async (sym) => {
-    try {
-      const bars = await fetchBars1h(sym, 800);
-      if(!bars || bars.length < p.Z_LOOKBACK_H + 50) return null;
-      return evaluateFundingCarry(sym, bars);
-    } catch(e){ return null; }
-  }));
+  const CHUNK = 3;
+  const insufficient = []; // track pairs that didn't get enough bars (for logging)
+  const errors = [];        // track pairs that errored
+  const results = [];
+  for (let i = 0; i < p.UNIVERSE.length; i += CHUNK) {
+    const chunk = p.UNIVERSE.slice(i, i + CHUNK);
+    const chunkResults = await Promise.all(chunk.map(async (sym) => {
+      try {
+        const bars = await fetchBars1h(sym, 800);
+        if(!bars || bars.length < p.Z_LOOKBACK_H + 50) {
+          insufficient.push({ sym, bars: bars?.length || 0 });
+          return null;
+        }
+        return evaluateFundingCarry(sym, bars);
+      } catch(e){
+        errors.push({ sym, err: e.message?.slice(0, 80) });
+        return null;
+      }
+    }));
+    results.push(...chunkResults);
+    // Brief pause between chunks to spread load on OKX
+    if (i + CHUNK < p.UNIVERSE.length) {
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
   const signals = results.filter(Boolean);
-  return { scanned: p.UNIVERSE.length, signals, window_type: getWindowTypeForHour(hr), reason: 'ok' };
+  return {
+    scanned: p.UNIVERSE.length,
+    signals,
+    window_type: getWindowTypeForHour(hr),
+    reason: 'ok',
+    insufficient_pairs: insufficient.length > 0 ? insufficient : undefined,
+    errored_pairs: errors.length > 0 ? errors : undefined
+  };
 }
 
 function findNextEligibleHour(fromHr){
