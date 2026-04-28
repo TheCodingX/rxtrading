@@ -665,9 +665,19 @@ const COINGECKO_ID_MAP = {
   JUPUSDT: 'jupiter-exchange-solana'
 };
 
+// 2026-04-28: bars cache to avoid OKX rate limit on full universe scans.
+// V44 uses 1h bars — refresh every 50 min (well under bar duration). Cache hit = 0ms.
+const _barsCache = new Map(); // symbol -> { bars, ts }
+const BARS_CACHE_TTL_MS = 50 * 60 * 1000; // 50 minutes
+
 // Fetch 1h klines with multi-source fallback chain.
 // 2026-04-27: Render IP geo-blocks Binance/Bybit. Solution: CoinGecko (universal, no auth).
 async function fetchBars1h(symbol, limit = 800){
+  // Check cache first — avoids hitting OKX rate limit on rapid successive scans
+  const cached = _barsCache.get(symbol);
+  if (cached && (Date.now() - cached.ts) < BARS_CACHE_TTL_MS && cached.bars && cached.bars.length >= limit * 0.85) {
+    return cached.bars;
+  }
   const BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   const fetchOpts = { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' } };
   const REQUIRED_MIN = Math.min(limit, 770);
@@ -850,42 +860,48 @@ async function fetchBars1h(symbol, limit = 800){
   } catch(e){}
 
   // Retornar el mejor candidato (puede ser <REQUIRED pero al menos no null)
+  // Cache solo si tenemos suficiente data (>=REQUIRED_MIN) para evitar guardar fetches fallidos
+  if (best && best.length >= REQUIRED_MIN) {
+    _barsCache.set(symbol, { bars: best, ts: Date.now() });
+  }
   return best;
 }
 
+// Helper exposed for diag/admin: clear bars cache (forces full refresh next scan)
+function clearBarsCache() { _barsCache.clear(); }
+function getBarsCacheStats() {
+  const stats = [];
+  for (const [sym, v] of _barsCache.entries()) {
+    stats.push({ symbol: sym, bars: v.bars?.length || 0, ageMs: Date.now() - v.ts });
+  }
+  return stats;
+}
+
 // Scan all pairs in the validated universe. Returns array of signals (non-null only).
-// 2026-04-28: process pairs in chunks of 3 to avoid OKX rate limit when paginating
-// (15 pairs × 7 OKX calls each = 105 simultaneous = throttled if all parallel).
-// Chunks of 3 = ~21 simultaneous calls, fits within OKX limits comfortably.
+// 2026-04-28: process pairs SERIALLY to avoid OKX rate limit on paginated calls.
+// First scan: ~30s (15 pairs × 2s cada). Subsequent scans within 50min: instant
+// thanks to in-memory bars cache. V44 uses 1h bars so cache TTL aligns with bar duration.
 async function scanAllPairs(){
   const p = SAFE_FUNDING_PARAMS;
   const hr = new Date().getUTCHours();
   if(!isEligibleHour(hr)){
     return { scanned: 0, signals: [], reason: 'outside_window', next_window_utc: findNextEligibleHour(hr) };
   }
-  const CHUNK = 3;
-  const insufficient = []; // track pairs that didn't get enough bars (for logging)
-  const errors = [];        // track pairs that errored
+  const insufficient = [];
+  const errors = [];
   const results = [];
-  for (let i = 0; i < p.UNIVERSE.length; i += CHUNK) {
-    const chunk = p.UNIVERSE.slice(i, i + CHUNK);
-    const chunkResults = await Promise.all(chunk.map(async (sym) => {
-      try {
-        const bars = await fetchBars1h(sym, 800);
-        if(!bars || bars.length < p.Z_LOOKBACK_H + 50) {
-          insufficient.push({ sym, bars: bars?.length || 0 });
-          return null;
-        }
-        return evaluateFundingCarry(sym, bars);
-      } catch(e){
-        errors.push({ sym, err: e.message?.slice(0, 80) });
-        return null;
+  for (const sym of p.UNIVERSE) {
+    try {
+      const bars = await fetchBars1h(sym, 800);
+      if (!bars || bars.length < p.Z_LOOKBACK_H + 50) {
+        insufficient.push({ sym, bars: bars?.length || 0 });
+        results.push(null);
+        continue;
       }
-    }));
-    results.push(...chunkResults);
-    // Brief pause between chunks to spread load on OKX
-    if (i + CHUNK < p.UNIVERSE.length) {
-      await new Promise(r => setTimeout(r, 200));
+      results.push(evaluateFundingCarry(sym, bars));
+    } catch(e){
+      errors.push({ sym, err: e.message?.slice(0, 80) });
+      results.push(null);
     }
   }
   const signals = results.filter(Boolean);
@@ -916,6 +932,8 @@ module.exports = {
   evaluateFundingCarry,
   fetchBars1h,
   scanAllPairs,
+  clearBarsCache,
+  getBarsCacheStats,
   isEligibleHour,
   getWindowTypeForHour,
   findNextEligibleHour,
