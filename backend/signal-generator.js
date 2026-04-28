@@ -59,7 +59,9 @@ async function runScanCycle() {
     if (!got) {
       return { skipped: 'lock_held_by_other_instance' };
     }
+    const t0 = Date.now();
     const scan = await v44.scanAllPairs();
+    const scanMs = Date.now() - t0;
     const results = {
       scanned: scan.scanned || 0,
       signals_found: (scan.signals || []).length,
@@ -67,6 +69,17 @@ async function runScanCycle() {
       duplicate: 0,
       reason: scan.reason
     };
+    // 2026-04-27: log every scan cycle in eligible windows for visibility
+    if (scan.reason === 'ok') {
+      console.log(`[SignalGen] scan complete in ${scanMs}ms — scanned=${scan.scanned}, signals_found=${results.signals_found}, window=${scan.window_type}`);
+      if (results.signals_found > 0) {
+        for (const s of scan.signals) {
+          console.log(`[SignalGen]   → ${s.signal} ${s.symbol} conf=${s.confidence} z=${s.funding_zscore?.toFixed(3) || 'n/a'} sizeMult=${s.size_multiplier || 'n/a'}`);
+        }
+      } else {
+        console.log(`[SignalGen]   no pair passed filters this cycle (z<threshold or funding not extreme)`);
+      }
+    }
 
     for (const sig of (scan.signals || [])) {
       try {

@@ -901,6 +901,28 @@ app.get('/api/v44/diag', async (req, res) => {
       probe('binance-spot', 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=800', (j) => Array.isArray(j) ? j.length : 0),
       probe('okx',          'https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1H&limit=300', (j) => j?.data?.length || 0)
     ]);
+
+    // 2026-04-27: Probe per-pair to detect silent failures in scanAllPairs
+    // Tests EVERY pair in the universe to ensure all 15 can fetch >=770 bars
+    let universeProbes = null;
+    if (req.query.full === '1') {
+      const pairs = v44.SAFE_FUNDING_PARAMS.UNIVERSE;
+      universeProbes = await Promise.all(pairs.map(async (sym) => {
+        const t0 = Date.now();
+        try {
+          const bars = await v44.fetchBars1h(sym, 800);
+          return {
+            symbol: sym,
+            ok: !!(bars && bars.length >= REQUIRED_BARS),
+            bars: bars?.length || 0,
+            sufficient: !!(bars && bars.length >= REQUIRED_BARS),
+            ms: Date.now() - t0
+          };
+        } catch (e) {
+          return { symbol: sym, ok: false, err: e.message.slice(0, 80), ms: Date.now() - t0 };
+        }
+      }));
+    }
     // Live evaluateFundingCarry test on BTC to see if signal would be generated
     let evalTest = { tested: false, result: null, err: null };
     if (eligible && fetchTest.sufficient) {
@@ -937,6 +959,7 @@ app.get('/api/v44/diag', async (req, res) => {
       },
       binance_fetch_test: fetchTest,
       source_probes: sourceProbes,
+      universe_probes: universeProbes,
       eval_test: evalTest,
       db_stats: {
         totalSignalsAllTime,
