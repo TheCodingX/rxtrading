@@ -307,16 +307,90 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   const tpClientOrderId = `${tradeCorrelationId}_t`.slice(0, 36);
   const slClientOrderId = `${tradeCorrelationId}_s`.slice(0, 36);
 
-  // 1. Entry market order FIRST — get the ACTUAL fill price
-  const entryParams = {
-    symbol: symbol.toUpperCase(),
-    side,
-    type: 'MARKET',
-    quantity,
-    newClientOrderId: entryClientOrderId,
-    ...(positionSide && { positionSide })
-  };
-  const entryOrder = await binanceRequest('POST', '/fapi/v1/order', entryParams, apiKey, apiSecret, true);
+  // 2026-04-28: maker-priority entry (slippage minimization)
+  // Strategy: try LIMIT GTX (post-only) at favorable side of currentPrice. If fills within
+  // MAKER_TIMEOUT_MS, save 0.03% (taker→maker fee delta) + 0.02% slippage = ~0.05% per trade.
+  // If not filled (price ran away or post-only rejected), cancel + fall back to MARKET.
+  // Controlled by env APEX_MAKER_PRIORITY=1 (default OFF for backward compat).
+  const MAKER_PRIORITY_ENABLED = process.env.APEX_MAKER_PRIORITY === '1';
+  const MAKER_TIMEOUT_MS = parseInt(process.env.APEX_MAKER_TIMEOUT_MS || '5000', 10);
+  const MAKER_OFFSET_TICKS = parseInt(process.env.APEX_MAKER_OFFSET_TICKS || '1', 10);
+
+  let entryOrder = null;
+  let entryMode = 'market';
+  let makerLimitPrice = null;
+
+  if (MAKER_PRIORITY_ENABLED) {
+    try {
+      // For BUY: post-only limit at currentPrice - N ticks (sit on the bid side, won't cross)
+      // For SELL: post-only limit at currentPrice + N ticks (sit on the ask side, won't cross)
+      const tickOffset = symbolInfo.tickSize * MAKER_OFFSET_TICKS;
+      makerLimitPrice = side === 'BUY'
+        ? roundToTick(currentPrice - tickOffset, symbolInfo.tickSize)
+        : roundToTick(currentPrice + tickOffset, symbolInfo.tickSize);
+
+      const makerParams = {
+        symbol: symbol.toUpperCase(),
+        side,
+        type: 'LIMIT',
+        timeInForce: 'GTX', // Post-only — rejected if would cross spread
+        quantity,
+        price: makerLimitPrice,
+        newClientOrderId: entryClientOrderId,
+        ...(positionSide && { positionSide })
+      };
+      const makerOrder = await binanceRequest('POST', '/fapi/v1/order', makerParams, apiKey, apiSecret, true);
+
+      // Poll for fill up to MAKER_TIMEOUT_MS
+      const pollStart = Date.now();
+      let pollOrder = makerOrder;
+      while (Date.now() - pollStart < MAKER_TIMEOUT_MS) {
+        if (pollOrder.status === 'FILLED') break;
+        await new Promise(r => setTimeout(r, 500));
+        try {
+          pollOrder = await binanceRequest('GET', '/fapi/v1/order', {
+            symbol: symbol.toUpperCase(),
+            origClientOrderId: entryClientOrderId
+          }, apiKey, apiSecret, true, 1);
+        } catch (e) { break; }
+      }
+
+      if (pollOrder.status === 'FILLED') {
+        entryOrder = pollOrder;
+        entryMode = 'maker';
+        console.log(`[Broker] ${symbol} ${side}: MAKER fill at ${pollOrder.avgPrice} (saved ~0.05% vs market)`);
+      } else {
+        // Cancel pending limit order
+        try {
+          await binanceRequest('DELETE', '/fapi/v1/order', {
+            symbol: symbol.toUpperCase(),
+            origClientOrderId: entryClientOrderId
+          }, apiKey, apiSecret, true, 1);
+        } catch (e) { /* may already be filled or cancelled */ }
+        console.log(`[Broker] ${symbol} ${side}: maker limit not filled in ${MAKER_TIMEOUT_MS}ms (status=${pollOrder.status}), falling back to MARKET`);
+      }
+    } catch (e) {
+      // GTX rejected (would cross) or other error → fall back to market
+      const reason = e.binanceCode === -5022 ? 'post_only_would_cross' : e.message?.slice(0, 60);
+      console.log(`[Broker] ${symbol} ${side}: maker priority skipped (${reason}), using MARKET`);
+    }
+  }
+
+  // Fallback: MARKET order (or when maker priority disabled/failed)
+  if (!entryOrder) {
+    // Use a fresh clientOrderId for the market fallback (different from the limit one)
+    const marketClientOrderId = `${tradeCorrelationId}_em`.slice(0, 36);
+    const entryParams = {
+      symbol: symbol.toUpperCase(),
+      side,
+      type: 'MARKET',
+      quantity,
+      newClientOrderId: marketClientOrderId,
+      ...(positionSide && { positionSide })
+    };
+    entryOrder = await binanceRequest('POST', '/fapi/v1/order', entryParams, apiKey, apiSecret, true);
+    entryMode = 'market';
+  }
 
   // Validate entry order filled correctly before placing TP/SL
   if (entryOrder.status && !['FILLED', 'NEW'].includes(entryOrder.status)) {
@@ -331,13 +405,16 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   // Sanity: if slippage >5% between signal and actual, abort (market likely illiquid or dumped)
   // 2026-04-23 fix 2.9: slippage threshold configurable per-pair.
   // Micro-caps (1000PEPE/SHIB/etc) tienen spreads más anchos, BTC/ETH muy tight.
+  // 2026-04-28: tightened slippage caps. With APEX_MAKER_PRIORITY=1 most orders fill at limit
+  // (zero slippage). Even market fallback should hit <0.5% on liquid pairs. Old caps (2-7%)
+  // were too permissive — accepting trades with -2% slippage erodes the funding edge entirely.
   const SLIPPAGE_PER_PAIR = {
-    'BTCUSDT': 0.02, 'ETHUSDT': 0.02, 'BNBUSDT': 0.025,      // blue chips: strict 2-2.5%
-    'SOLUSDT': 0.03, 'XRPUSDT': 0.03, 'ADAUSDT': 0.035, 'LINKUSDT': 0.035,
-    'ARBUSDT': 0.04, 'POLUSDT': 0.04, 'ATOMUSDT': 0.04, 'NEARUSDT': 0.04, 'SUIUSDT': 0.04, 'TRXUSDT': 0.04, 'INJUSDT': 0.04, 'RENDERUSDT': 0.04,
-    '1000PEPEUSDT': 0.06, 'DOGEUSDT': 0.05, 'SHIBUSDT': 0.07 // memecoins: relaxed 5-7%
+    'BTCUSDT': 0.005, 'ETHUSDT': 0.005, 'BNBUSDT': 0.008,    // blue chips: 0.5-0.8%
+    'SOLUSDT': 0.010, 'XRPUSDT': 0.010, 'ADAUSDT': 0.012, 'LINKUSDT': 0.012,
+    'ARBUSDT': 0.015, 'POLUSDT': 0.015, 'ATOMUSDT': 0.015, 'NEARUSDT': 0.015, 'SUIUSDT': 0.015, 'TRXUSDT': 0.015, 'INJUSDT': 0.015, 'RENDERUSDT': 0.018,
+    '1000PEPEUSDT': 0.025, 'DOGEUSDT': 0.020, 'SHIBUSDT': 0.030 // memecoins: 2-3%
   };
-  const maxSlippage = SLIPPAGE_PER_PAIR[symbol.toUpperCase()] || 0.05; // default 5%
+  const maxSlippage = SLIPPAGE_PER_PAIR[symbol.toUpperCase()] || 0.020; // default 2%
   const slippagePct = Math.abs(actualEntry - currentPrice) / currentPrice;
   if (slippagePct > maxSlippage) {
     // Emergency close the position
@@ -396,6 +473,8 @@ async function placeTradeWithTPSL(apiKey, apiSecret, opts) {
   const result = {
     entry: entryOrder,
     actualEntry,
+    entryMode, // 'maker' or 'market' — for slippage tracking + UI display
+    makerLimitPrice, // null if went direct market
     tp: null,
     sl: null,
     tpPrice,

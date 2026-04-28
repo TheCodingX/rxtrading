@@ -88,6 +88,23 @@ async function runScanCycle() {
         const list = scan.errored_pairs.map(p => `${p.sym}:${p.err}`).join(' | ');
         console.warn(`[SignalGen] ${scan.errored_pairs.length} pairs errored: ${list}`);
       }
+      // 2026-04-28: log per-pair skip reasons grouped (so we know if filters are too strict)
+      if (scan.skipped_reasons && scan.skipped_reasons.length > 0) {
+        const grouped = {};
+        for (const s of scan.skipped_reasons) {
+          (grouped[s.reason] = grouped[s.reason] || []).push(s.sym);
+        }
+        const summary = Object.entries(grouped).map(([r, syms]) => `${r}=${syms.length}[${syms.slice(0, 4).join(',')}${syms.length > 4 ? '...' : ''}]`).join(' ');
+        console.log(`[SignalGen]   skips: ${summary}`);
+        // Sample one detail per reason for debugging filter calibration
+        const samples = {};
+        for (const s of scan.skipped_reasons) {
+          if (!samples[s.reason]) samples[s.reason] = s;
+        }
+        for (const [reason, sample] of Object.entries(samples)) {
+          console.log(`[SignalGen]   sample[${reason}] ${sample.sym}: f=${sample.funding} z=${sample.z} q=${sample.quality} (p80=${sample.p80_thr}, p20=${sample.p20_thr})`);
+        }
+      }
     }
 
     for (const sig of (scan.signals || [])) {

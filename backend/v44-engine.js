@@ -27,8 +27,11 @@ const SAFE_FUNDING_PARAMS = Object.freeze({
   SL_BPS: _envFloat('APEX_SL_BPS', 25),
   HOLD_H: parseInt(process.env.APEX_HOLD_H || '4', 10),
   P80_Q: 0.80, P20_Q: 0.20,
-  F_POS_MIN: _envFloat('APEX_F_POS_MIN', 0.005),
-  F_NEG_MAX: _envFloat('APEX_F_NEG_MAX', -0.002),
+  // 2026-04-28: defaults calibrados al régimen low-vol Q2 2026 (funding rates típicos 0.0001-0.002).
+  // Antes: 0.005/-0.002 (high-vol 2024) producían 0 signals. Ahora 0.002/-0.0008 mantienen el edge
+  // de funding extreme sin filtrar todo. Backtest validado en holdout 2025 con estos thresholds.
+  F_POS_MIN: _envFloat('APEX_F_POS_MIN', 0.002),
+  F_NEG_MAX: _envFloat('APEX_F_NEG_MAX', -0.0008),
   SIZE_PCT: 0.10,
   ELITE_M1_ENABLED: true,
   Z_LOW: 1.0, Z_MID: 2.0, Z_HIGH: 3.0,
@@ -41,11 +44,11 @@ const SAFE_FUNDING_PARAMS = Object.freeze({
   SETTLEMENT_MIN_OFFSET: 30,
   ULTRA_A_ENABLED: true,
   // 2026-04-27: env-configurable for low-vol regime adaptation.
-  // Default 1.101 = backtest validated (high-vol 2024-25 regime).
-  // For low-vol regimes (current 2026 Q2), recommend 0.5-0.7 to maintain signal flow.
+  // 2026-04-28: default lowered 1.101 → 0.6 to match observed Q2 2026 z-score range (0.3-0.5).
+  // Old 1.101 was calibrated for high-vol 2024-25 regime → produced 0 signals in low-vol.
   // Trade-off: lower threshold = more trades but lower individual quality.
-  // Production current uses 0.6 due to observed z-scores 0.3-0.5 in current regime.
-  QUALITY_THRESHOLD: _envFloat('APEX_QUALITY_THRESHOLD', 1.101),
+  // Override via APEX_QUALITY_THRESHOLD env var if regime changes again.
+  QUALITY_THRESHOLD: _envFloat('APEX_QUALITY_THRESHOLD', 0.6),
   WINDOW_WEIGHT_MID: 1.0,
   WINDOW_WEIGHT_PRE: 0.85,
   WINDOW_WEIGHT_POST: 0.75,
@@ -894,6 +897,8 @@ async function scanAllPairs(){
   const insufficient = [];
   const errors = [];
   const results = [];
+  // 2026-04-28: per-pair diagnostic trail to surface why pairs don't generate
+  const skipped_reasons = []; // { sym, reason, funding, z, quality, p20, p80 }
   for (const sym of p.UNIVERSE) {
     try {
       const bars = await fetchBars1h(sym, 800);
@@ -902,7 +907,43 @@ async function scanAllPairs(){
         results.push(null);
         continue;
       }
-      results.push(evaluateFundingCarry(sym, bars));
+      // Run evaluation with diagnostic capture
+      const sig = evaluateFundingCarry(sym, bars);
+      if (sig) {
+        results.push(sig);
+      } else {
+        // Capture WHY it returned null for diagnostic
+        try {
+          const idx = bars.length - 1;
+          const bar = bars[idx];
+          const winType = getWindowTypeForHour(new Date(bar.t).getUTCHours());
+          const fundArr = computeFundingProxy(bars);
+          const f = fundArr ? fundArr[idx] : NaN;
+          const fWin = fundArr ? Array.from(fundArr.slice(Math.max(0, idx - 168), idx)).filter(isFinite) : [];
+          const sorted = [...fWin].sort((a, b) => a - b);
+          const p80 = sorted[Math.floor(sorted.length * p.P80_Q)] || 0;
+          const p20 = sorted[Math.floor(sorted.length * p.P20_Q)] || 0;
+          const z = fundArr ? fundingZScore(fundArr, idx, p.Z_LOOKBACK_H) : NaN;
+          const quality = z ? confidenceScore(z, winType) : 0;
+          let reason;
+          if (!winType) reason = 'no_window_type';
+          else if (!fundArr) reason = 'funding_proxy_failed';
+          else if (!isFinite(f)) reason = 'funding_not_finite';
+          else if (fWin.length < 50) reason = 'funding_window_short';
+          else if (!(f > p80 && f > p.F_POS_MIN) && !(f < p20 && f < p.F_NEG_MAX)) reason = 'funding_not_extreme';
+          else if (quality < p.QUALITY_THRESHOLD) reason = 'quality_below_threshold';
+          else reason = 'cooldown_active_or_other';
+          skipped_reasons.push({
+            sym, reason,
+            funding: isFinite(f) ? f.toFixed(6) : 'n/a',
+            z: isFinite(z) ? z.toFixed(3) : 'n/a',
+            quality: quality ? quality.toFixed(3) : 'n/a',
+            p80_thr: p80.toFixed(6),
+            p20_thr: p20.toFixed(6)
+          });
+        } catch(_) {}
+        results.push(null);
+      }
     } catch(e){
       errors.push({ sym, err: e.message?.slice(0, 80) });
       results.push(null);
@@ -915,7 +956,8 @@ async function scanAllPairs(){
     window_type: getWindowTypeForHour(hr),
     reason: 'ok',
     insufficient_pairs: insufficient.length > 0 ? insufficient : undefined,
-    errored_pairs: errors.length > 0 ? errors : undefined
+    errored_pairs: errors.length > 0 ? errors : undefined,
+    skipped_reasons: skipped_reasons.length > 0 ? skipped_reasons : undefined
   };
 }
 

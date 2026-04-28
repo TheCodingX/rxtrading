@@ -937,6 +937,27 @@ app.get('/api/v44/diag', async (req, res) => {
         evalTest = { tested: true, result: sig === null ? 'NEUTRAL_or_null' : { signal: sig.signal, confidence: sig.confidence, fz: sig.funding_zscore } };
       } catch(e){ evalTest.err = e.message; }
     }
+    // 2026-04-28: full scan diagnostic — runs scanAllPairs and returns per-pair skip reasons
+    let liveScanDiag = null;
+    if (req.query.scan === '1' && eligible) {
+      try {
+        const scan = await v44.scanAllPairs();
+        liveScanDiag = {
+          scanned: scan.scanned,
+          signals_found: (scan.signals || []).length,
+          window: scan.window_type,
+          signals: (scan.signals || []).map(s => ({
+            sym: s.symbol, dir: s.signal, conf: s.confidence,
+            z: s.funding_zscore?.toFixed(3),
+            f: s.funding?.toFixed(6),
+            quality: s.quality_score?.toFixed(3)
+          })),
+          insufficient: scan.insufficient_pairs,
+          errored: scan.errored_pairs,
+          skipped: scan.skipped_reasons
+        };
+      } catch(e){ liveScanDiag = { err: e.message }; }
+    }
     // Check if generator running by looking at last scan attempt + signal counts
     let lastSignalAttempt = null;
     let totalSignalsAllTime = 0;
@@ -960,13 +981,26 @@ app.get('/api/v44/diag', async (req, res) => {
         V46_R5_WINDOW: v44.SAFE_FUNDING_PARAMS.V46_R5_WINDOW_WEIGHTS,
         V46_R6_CORR: v44.SAFE_FUNDING_PARAMS.V46_R6_CORR_DAMPENER,
         V46_T6_BAYESIAN: v44.SAFE_FUNDING_PARAMS.V46_T6_BAYESIAN,
-        V46_T5_HAWKES: v44.SAFE_FUNDING_PARAMS.V46_T5_HAWKES
+        V46_T5_HAWKES: v44.SAFE_FUNDING_PARAMS.V46_T5_HAWKES,
+        MAKER_PRIORITY: process.env.APEX_MAKER_PRIORITY === '1'
+      },
+      // 2026-04-28: expose actual filter thresholds being used (so we know if Render env vars
+      // override defaults, or if the new low-vol calibration is active)
+      params_active: {
+        QUALITY_THRESHOLD: v44.SAFE_FUNDING_PARAMS.QUALITY_THRESHOLD,
+        F_POS_MIN: v44.SAFE_FUNDING_PARAMS.F_POS_MIN,
+        F_NEG_MAX: v44.SAFE_FUNDING_PARAMS.F_NEG_MAX,
+        SETTLEMENT_HOURS: v44.SAFE_FUNDING_PARAMS.SETTLEMENT_HOURS,
+        TP_BPS: v44.SAFE_FUNDING_PARAMS.TP_BPS,
+        SL_BPS: v44.SAFE_FUNDING_PARAMS.SL_BPS,
+        Z_LOOKBACK_H: v44.SAFE_FUNDING_PARAMS.Z_LOOKBACK_H
       },
       binance_fetch_test: fetchTest,
       source_probes: sourceProbes,
       universe_probes: universeProbes,
       bars_cache: cacheStats,
       eval_test: evalTest,
+      live_scan_diag: liveScanDiag, // only when ?scan=1 and in window
       db_stats: {
         totalSignalsAllTime,
         totalEventsAllTime,
