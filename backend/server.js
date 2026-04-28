@@ -878,6 +878,28 @@ app.get('/api/v44/diag', async (req, res) => {
         lastTs: bars?.[bars.length-1]?.t || null
       };
     } catch(e){ fetchTest.err = e.message; }
+
+    // 2026-04-27: Probe individual de cada source para diagnosticar geo-block desde Render IP
+    const BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    const fopts = { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' } };
+    const probe = async (name, url, parser) => {
+      const t0 = Date.now();
+      try {
+        const r = await fetch(url, fopts);
+        const ms = Date.now() - t0;
+        if (!r.ok) return { name, ok: false, status: r.status, bars: 0, ms };
+        const j = await r.json();
+        const bars = parser(j);
+        return { name, ok: bars > 0, status: r.status, bars, ms };
+      } catch(e) { return { name, ok: false, err: e.message.slice(0,80), ms: Date.now() - t0 }; }
+    };
+    const sourceProbes = await Promise.all([
+      probe('binance-fapi', 'https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=800', (j) => Array.isArray(j) ? j.length : 0),
+      probe('bybit',        'https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval=60&limit=1000', (j) => j?.result?.list?.length || 0),
+      probe('cryptocompare','https://min-api.cryptocompare.com/data/v2/histohour?fsym=BTC&tsym=USDT&limit=800', (j) => j?.Data?.Data?.length || 0),
+      probe('binance-spot', 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=800', (j) => Array.isArray(j) ? j.length : 0),
+      probe('okx',          'https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1H&limit=300', (j) => j?.data?.length || 0)
+    ]);
     // Live evaluateFundingCarry test on BTC to see if signal would be generated
     let evalTest = { tested: false, result: null, err: null };
     if (eligible && fetchTest.sufficient) {
@@ -913,6 +935,7 @@ app.get('/api/v44/diag', async (req, res) => {
         V46_T5_HAWKES: v44.SAFE_FUNDING_PARAMS.V46_T5_HAWKES
       },
       binance_fetch_test: fetchTest,
+      source_probes: sourceProbes,
       eval_test: evalTest,
       db_stats: {
         totalSignalsAllTime,
