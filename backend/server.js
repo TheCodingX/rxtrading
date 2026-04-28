@@ -902,28 +902,29 @@ app.get('/api/v44/diag', async (req, res) => {
       probe('okx',          'https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1H&limit=300', (j) => j?.data?.length || 0)
     ]);
 
-    // 2026-04-27: Probe per-pair to detect silent failures in scanAllPairs
-    // Tests EVERY pair SERIALLY (matches scanAllPairs production behavior).
-    // 2026-04-28: serial fetch + cache means first probe ~30s, subsequent are <1s.
+    // 2026-04-28: full=1 is CACHE-ONLY. Doesn't trigger real fetches (would timeout
+    // 30s on Render edge). Cache is warmed by scan cycles during eligible windows.
+    // To force warm: POST /api/admin/v44/warm-cache (admin only, runs in background).
     let universeProbes = null;
     if (req.query.full === '1') {
       const pairs = v44.SAFE_FUNDING_PARAMS.UNIVERSE;
-      universeProbes = [];
-      for (const sym of pairs) {
-        const t0 = Date.now();
-        try {
-          const bars = await v44.fetchBars1h(sym, 800);
-          universeProbes.push({
-            symbol: sym,
-            ok: !!(bars && bars.length >= REQUIRED_BARS),
-            bars: bars?.length || 0,
-            sufficient: !!(bars && bars.length >= REQUIRED_BARS),
-            ms: Date.now() - t0
-          });
-        } catch (e) {
-          universeProbes.push({ symbol: sym, ok: false, err: e.message.slice(0, 80), ms: Date.now() - t0 });
-        }
+      const cacheMap = {};
+      if (typeof v44.getBarsCacheStats === 'function') {
+        for (const c of v44.getBarsCacheStats()) cacheMap[c.symbol] = c;
       }
+      universeProbes = pairs.map((sym) => {
+        const c = cacheMap[sym];
+        if (!c) return { symbol: sym, ok: false, bars: 0, sufficient: false, cached: false };
+        return {
+          symbol: sym,
+          ok: c.bars >= REQUIRED_BARS,
+          bars: c.bars,
+          sufficient: c.bars >= REQUIRED_BARS,
+          cached: true,
+          ageMs: c.ageMs,
+          ageMin: Math.round(c.ageMs / 60000)
+        };
+      });
     }
     // Bars cache stats (always shown, helps debug cache hit/miss)
     const cacheStats = (typeof v44.getBarsCacheStats === 'function') ? v44.getBarsCacheStats() : null;
@@ -985,6 +986,40 @@ app.post('/api/admin/v44/force-scan', verifyAdminSecret, async (req, res) => {
     res.json({ ok: true, result, ts: Date.now() });
   } catch (err) {
     res.status(500).json({ error: 'force_scan_failed', message: err.message });
+  }
+});
+
+// 2026-04-28: warm bars cache in background (doesn't await — returns instantly).
+// Useful for testing post-deploy: triggers serial fetch of all 15 pairs, then cache
+// is hot for next 50 min. Check progress via /api/v44/diag.bars_cache.
+// PUBLIC endpoint (no auth) since it only reads public market data and rate-limits naturally.
+app.post('/api/v44/warm-cache', async (req, res) => {
+  try {
+    const v44 = require('./v44-engine');
+    const pairs = v44.SAFE_FUNDING_PARAMS.UNIVERSE;
+    // Fire-and-forget: do serial fetch in background
+    (async () => {
+      console.log('[WarmCache] starting serial fetch of', pairs.length, 'pairs');
+      const t0 = Date.now();
+      let ok = 0, fail = 0;
+      for (const sym of pairs) {
+        try {
+          const bars = await v44.fetchBars1h(sym, 800);
+          if (bars && bars.length >= 770) ok++;
+          else fail++;
+        } catch (e) { fail++; }
+      }
+      console.log(`[WarmCache] complete in ${Date.now() - t0}ms — ok=${ok} fail=${fail}`);
+    })().catch(e => console.error('[WarmCache] error:', e.message));
+    res.json({
+      ok: true,
+      message: 'warm-cache started in background',
+      pairs: pairs.length,
+      check_progress: 'GET /api/v44/diag?full=1 → universe_probes',
+      eta_seconds: pairs.length * 2.5
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'warm_cache_failed', message: err.message });
   }
 });
 
