@@ -683,6 +683,14 @@ async function fetchBars1h(symbol, limit = 800){
   const REQUIRED_MIN = Math.min(limit, 770);
 
   let best = null;
+  // 2026-04-28: finalize() caches sufficient results before returning. Fixes bug where
+  // early returns from successful sources skipped the cache.set() at function tail.
+  const finalize = (bars) => {
+    if (bars && bars.length >= REQUIRED_MIN) {
+      _barsCache.set(symbol, { bars, ts: Date.now() });
+    }
+    return bars;
+  };
   const considerCandidate = (bars) => {
     if (!bars || bars.length === 0) return false;
     if (!best || bars.length > best.length) best = bars;
@@ -699,7 +707,7 @@ async function fetchBars1h(symbol, limit = 800){
       const arr = await r.json();
       if (Array.isArray(arr) && arr.length > 0) {
         const bars = arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
-        if (considerCandidate(bars)) return bars;
+        if (considerCandidate(bars)) return finalize(bars);
       }
     }
   } catch(e){}
@@ -712,7 +720,7 @@ async function fetchBars1h(symbol, limit = 800){
       const list = j?.result?.list;
       if (Array.isArray(list) && list.length > 0) {
         const bars = list.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) })).reverse();
-        if (considerCandidate(bars)) return bars;
+        if (considerCandidate(bars)) return finalize(bars);
       }
     }
   } catch(e){}
@@ -731,7 +739,7 @@ async function fetchBars1h(symbol, limit = 800){
         if (Array.isArray(prices) && prices.length > 0) {
           // CoinGecko: [[ts_ms, price], ...] oldest-first
           const bars = prices.map(p => ({ t: parseInt(p[0]), c: parseFloat(p[1]) }));
-          if (considerCandidate(bars)) return bars;
+          if (considerCandidate(bars)) return finalize(bars);
         }
       }
     }
@@ -815,7 +823,7 @@ async function fetchBars1h(symbol, limit = 800){
         for (const b of collected){
           if (b.t !== lastT){ dedup.push(b); lastT = b.t; }
         }
-        if (considerCandidate(dedup)) return dedup;
+        if (considerCandidate(dedup)) return finalize(dedup);
       }
     }
   } catch(e){}
@@ -840,7 +848,7 @@ async function fetchBars1h(symbol, limit = 800){
             const bars = arr
               .filter(k => k && k.time && k.close)
               .map(k => ({ t: parseInt(k.time) * 1000, c: parseFloat(k.close) }));
-            if (bars.length > 0 && considerCandidate(bars)) return bars;
+            if (bars.length > 0 && considerCandidate(bars)) return finalize(bars);
           }
         } catch(e){}
       }
@@ -854,17 +862,13 @@ async function fetchBars1h(symbol, limit = 800){
       const arr = await r.json();
       if (Array.isArray(arr) && arr.length > 0) {
         const bars = arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
-        if (considerCandidate(bars)) return bars;
+        if (considerCandidate(bars)) return finalize(bars);
       }
     }
   } catch(e){}
 
-  // Retornar el mejor candidato (puede ser <REQUIRED pero al menos no null)
-  // Cache solo si tenemos suficiente data (>=REQUIRED_MIN) para evitar guardar fetches fallidos
-  if (best && best.length >= REQUIRED_MIN) {
-    _barsCache.set(symbol, { bars: best, ts: Date.now() });
-  }
-  return best;
+  // Retornar el mejor candidato. finalize() handles cache.set if sufficient.
+  return finalize(best);
 }
 
 // Helper exposed for diag/admin: clear bars cache (forces full refresh next scan)
