@@ -1,0 +1,45 @@
+{
+  "phase": "7 — CPCV Final",
+  "runtime_s": 0.032,
+  "n_days": 264,
+  "n_paths": 105,
+  "full_sharpe": 1.7473479923593052,
+  "cpcv": {
+    "n_paths": 105,
+    "sharpe_mean": 1.232154615177963,
+    "sharpe_std": 3.8025790973202085,
+    "p5": -4.6002413686200345,
+    "p50": 1.5682967893149278,
+    "p95": 8.395446148713733,
+    "positive_fraction": 0.7047619047619048,
+    "train_mean": 1.85966532748879
+  },
+  "deflated_sharpe": {
+    "dsr": 1.1899090300627846,
+    "emax": 9.687912760283444,
+    "pvalue": 0.8829588620368722,
+    "bestSharpe": 13.466529263241707,
+    "meanSharpe": 1.232154615177963,
+    "stdSharpe": 3.8025790973202085
+  },
+  "pbo": 0.49523809523809526,
+  "white_rc": {
+    "pvalue": 0.0315,
+    "obs": 1.7473479923593052,
+    "nullMean": -0.32900638286158396
+  },
+  "skewness": 6.74580208380173,
+  "kurtosis": 61.47986582397876,
+  "gates": {
+    "pf_check": true,
+    "wr_check": true,
+    "tpd_check": true,
+    "dd_check": true,
+    "months_pos_check": true,
+    "dsr_ge_2": false,
+    "pbo_lt_03": false,
+    "wrc_pvalue_lt_005": true
+  },
+  "all_gates_pass": false,
+  "verdict": "GRAY ZONE"
+}

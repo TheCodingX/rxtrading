@@ -1,0 +1,179 @@
+{
+  "phase": "3 \u2014 Model Revolution",
+  "runtime_s": 104.35052680969238,
+  "n_pairs": 15,
+  "total_models": 375,
+  "per_pair": {
+    "ADAUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 1974,
+      "n_labels_neg": 4541,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.3878317006639594,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "ARBUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2085,
+      "n_labels_neg": 4430,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.40715882530518566,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "ETHUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2160,
+      "n_labels_neg": 4355,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.4060352141507574,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "XRPUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2034,
+      "n_labels_neg": 4481,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.4003690797124911,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "BTCUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2056,
+      "n_labels_neg": 4459,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.39795638155388524,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "1000PEPEUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 1999,
+      "n_labels_neg": 4516,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.3948260506934021,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "ATOMUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2134,
+      "n_labels_neg": 4381,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.4048493003464068,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "LINKUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2112,
+      "n_labels_neg": 4403,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.41174044191865083,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "SOLUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2098,
+      "n_labels_neg": 4417,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.3986866539236395,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "LTCUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2106,
+      "n_labels_neg": 4405,
+      "n_labels_zero": 65,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.41039166905478763,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "DOTUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2014,
+      "n_labels_neg": 4499,
+      "n_labels_zero": 63,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.39938172267554345,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "NEARUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2085,
+      "n_labels_neg": 4430,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.40987313430233063,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "AVAXUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2097,
+      "n_labels_neg": 4415,
+      "n_labels_zero": 64,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.40377074015703346,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "DOGEUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2080,
+      "n_labels_neg": 4435,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.39871071037375916,
+      "valid_pred_rate": 0.5474452554744526
+    },
+    "BNBUSDT": {
+      "n_features": 19,
+      "n_labels_pos": 2251,
+      "n_labels_neg": 4264,
+      "n_labels_zero": 61,
+      "n_windows": 5,
+      "n_models": 25,
+      "mean_prob": 0.42049457396187456,
+      "valid_pred_rate": 0.5474452554744526
+    }
+  },
+  "feature_cols": [
+    "adx",
+    "macd_hist_norm",
+    "ema9_21",
+    "ema21_50",
+    "ret_1h",
+    "ret_3h",
+    "ret_6h",
+    "rsi14",
+    "rsi7",
+    "bb_pos",
+    "ti",
+    "up_wick",
+    "lo_wick",
+    "body_ratio",
+    "vol_zscore",
+    "ofi_4h",
+    "toxicity",
+    "tox_abs",
+    "ffd_close"
+  ]
+}

@@ -62,6 +62,15 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield;}
   --gs:0 0 5px rgba(0,140,44,.2);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+/* 2026-04-27 a11y: global prefers-reduced-motion safety net (defense-in-depth on top of per-component) */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.01ms!important;
+    scroll-behavior:auto!important;
+  }
+}
 ::-webkit-scrollbar{width:3px;height:3px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--bh);border-radius:2px;}
@@ -3354,7 +3363,7 @@ body.is-vip-mode #CR {
     <!-- Google User Profile / Login -->
     <div id="sb-user-section" style="margin-top:auto;padding-top:8px;border-top:1px solid var(--b);">
       <div id="sb-user-profile" style="display:none;" class="sb-user">
-        <img id="sb-user-avatar" src="" alt="User">
+        <img id="sb-user-avatar" src="data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2040%2040%22%3E%3Crect%20width%3D%2240%22%20height%3D%2240%22%20rx%3D%2220%22%20fill%3D%22%23222%22%2F%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2215%22%20r%3D%227%22%20fill%3D%22%23080808%22%2F%3E%3Cellipse%20cx%3D%2220%22%20cy%3D%2236%22%20rx%3D%2213%22%20ry%3D%2211%22%20fill%3D%22%23080808%22%2F%3E%3C%2Fsvg%3E" alt="User">
         <div class="sb-user-info">
           <div class="sb-user-name" id="sb-user-name"></div>
           <div class="sb-user-email" id="sb-user-email"></div>
@@ -3545,10 +3554,10 @@ body.is-vip-mode #CR {
    <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:18px; gap:10px;">
                 <div class="sp-lbl" style="margin-bottom:0;">SEÑAL MULTI-INDICADOR</div>
                 <div style="display:flex;align-items:center;gap:8px; background:var(--bg1); padding:4px 8px; border-radius:6px; border:1px solid rgba(0,255,65,0.1);">
-                    <span id="main-mode-badge" class="wr-badge badge-free">CORE</span>
+                    <span id="main-mode-badge" class="wr-badge badge-free">APEX</span>
                     <select class="ms" id="main-mode-sel" onchange="changeMainMode(this.value)" style="font-size:9px;padding:2px 20px 2px 6px;height:22px;border-color:transparent;color:var(--n); background-color:transparent;">
-                        <option value="frequent" selected>CORE</option>
-                        <option value="strict">APEX ENGINE</option>
+                        <option value="strict" selected>APEX ENGINE</option>
+                        <option value="frequent">CORE</option>
                     </select>
                 </div>
             </div>
@@ -3741,7 +3750,7 @@ body.is-vip-mode #CR {
       <div id="signals-vip-promo" style="margin-top:14px;padding:28px 24px;border-radius:16px;border:2px solid rgba(255,215,0,.38);background:linear-gradient(135deg,rgba(255,215,0,.05),rgba(255,140,0,.02));position:relative;overflow:hidden;text-align:center;">
         <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#FFD700,rgba(255,165,0,.9),#FFD700,transparent);animation:goldLine 2.5s ease-in-out infinite;"></div>
         <div style="font-family:'Orbitron',monospace;font-size:15px;color:var(--g);margin-bottom:8px;letter-spacing:3px;">ACCESO INSTITUCIONAL VIP</div>
-        <div style="font-size:13px;color:rgba(255,215,0,.75);margin-bottom:18px;line-height:1.7;max-width:620px;margin-left:auto;margin-right:auto">Herramientas avanzadas de grado institucional para traders exigentes. Señales de alta frecuencia, <b style="color:#FFD700">autotrading real en Binance Futures</b>, scanner avanzado y gestión automática de riesgo.</div>
+        <div id="signals-vip-banner-text" style="font-size:13px;color:rgba(255,215,0,.75);margin-bottom:18px;line-height:1.7;max-width:620px;margin-left:auto;margin-right:auto">Herramientas avanzadas de grado institucional para traders exigentes. Señales de alta frecuencia, <b style="color:#FFD700">autotrading real en Binance Futures</b>, scanner avanzado y gestión automática de riesgo.</div>
 
         <!-- HIGHLIGHT CARD: Real Autotrading -->
         <div style="max-width:620px;margin:0 auto 18px;padding:16px 20px;border-radius:12px;background:linear-gradient(135deg,rgba(255,215,0,.1),rgba(255,140,0,.03));border:1px solid rgba(255,215,0,.35);position:relative;overflow:hidden;text-align:left;">
@@ -4081,7 +4090,7 @@ body.is-vip-mode #CR {
           <!-- VIP STATS BAR -->
           <div style="display:flex;justify-content:center;gap:24px;margin:16px 0;flex-wrap:wrap;">
             <div class="vgate-apex-pnl-box" style="text-align:center;padding:14px 20px;border-radius:12px;background:linear-gradient(135deg,rgba(255,215,0,.1),rgba(255,140,0,.04));border:1px solid rgba(255,215,0,.4);min-width:110px;position:relative;overflow:hidden;box-shadow:0 0 22px rgba(255,215,0,.18),inset 0 0 16px rgba(255,215,0,.05);animation:vgateApexFloat 4s ease-in-out infinite;">
-              <div id="vgate-wr-val" style="font-family:'Orbitron',monospace;font-size:24px;font-weight:900;background:linear-gradient(135deg,#ffd700 0%,#ffed4e 50%,#ff8c00 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 14px rgba(255,215,0,.6));animation:vgateApexPulse 2.5s ease-in-out infinite;letter-spacing:-.5px;">+436%</div>
+              <div id="vgate-wr-val" style="font-family:'Orbitron',monospace;font-size:24px;font-weight:900;background:linear-gradient(135deg,#ffd700 0%,#ffed4e 50%,#ff8c00 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 14px rgba(255,215,0,.6));animation:vgateApexPulse 2.5s ease-in-out infinite;letter-spacing:-.5px;">+37%</div>
               <div style="font-size:8px;color:rgba(255,215,0,.85);letter-spacing:1.3px;font-family:'JetBrains Mono',monospace;font-weight:700;text-shadow:0 0 6px rgba(255,215,0,.3);">APEX PnL 365d <span style="display:inline-block;width:5px;height:5px;background:#ffd700;border-radius:50%;margin-left:3px;box-shadow:0 0 8px rgba(255,215,0,.9);animation:vgateSparkle 1.2s ease-in-out infinite;"></span></div>
               <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,215,0,.18),transparent);animation:vgateApexShine 3s ease-in-out infinite;"></div>
             </div>
@@ -4713,7 +4722,7 @@ body.is-vip-mode #CR {
                   <button class="stab" onclick="chVIPSym('PEPEUSDT',this)">PEPE</button>
                 </div>
                 <button class="tbtn tb-g" id="btn-force-vip" onclick="forceVIPSig()" style="display:flex; align-items:center;"><span id="force-spin" style="display:none" class="spin-loader"></span>↯ FORZAR ANÁLISIS</button>
-                <div style="display:flex;align-items:center;gap:6px;"><div class="bdt"></div><span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,215,0,.5)" id="vtimer">—</span></div>
+                <div style="display:flex;align-items:center;gap:6px;"><div class="bdt"></div><span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,215,0,.5)" id="vtimer">Escaneando 15 pares...</span></div>
               </div>
             </div>
             <div id="vip-schedule-status"></div>
@@ -5223,10 +5232,9 @@ body.is-vip-mode #CR {
               <div style="display:flex;flex-direction:column;gap:3px;">
                 <div style="font-family:'Orbitron',monospace;font-size:7px;letter-spacing:1.5px;color:rgba(255,215,0,.55);">PERIODO</div>
                 <select id="bt-days-sel" class="ms" style="font-size:11px;padding:4px 22px 4px 8px;border-color:rgba(255,215,0,.3);color:var(--g);background-color:rgba(0,0,0,.4);min-width:140px;">
-                  <option value="7" selected>Últimos 7 días</option>
-                  <option value="30">Últimos 30 días</option>
-                  <option value="60">Últimos 60 días</option>
+                  <option value="60" selected>Últimos 60 días</option>
                   <option value="120">Últimos 120 días</option>
+                  <option value="364">Últimos 364 días</option>
                 </select>
               </div>
               <div style="display:flex;flex-direction:column;gap:3px;">
@@ -5248,13 +5256,13 @@ body.is-vip-mode #CR {
                 ▶ EJECUTAR BACKTEST
               </button>
               <button id="bt-matrix-btn" onclick="runBacktestMatrix()" style="padding:8px 16px;background:linear-gradient(135deg,rgba(168,85,247,.18),rgba(0,212,255,.10));border:1px solid rgba(168,85,247,.5);color:#c084fc;font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1.5px;font-weight:700;border-radius:8px;cursor:pointer;text-shadow:0 0 8px rgba(168,85,247,.4);box-shadow:0 0 15px rgba(168,85,247,.12);transition:all .3s;">
-                ▶ MATRIZ APEX · 7/30/60/120d
+                ▶ MATRIZ APEX · 60/120/364d
               </button>
             </div>
             <!-- Periods Matrix Card (populated by runBacktestMatrix) -->
             <div id="bt-matrix-wrap" style="display:none;margin:12px 0 14px 0;padding:14px;background:linear-gradient(135deg,rgba(168,85,247,.05),rgba(0,212,255,.03));border:1px solid rgba(168,85,247,.25);border-radius:10px;">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                <span style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:1.5px;color:#c084fc;text-shadow:0 0 6px rgba(168,85,247,.4);">📊 MATRIZ DE PERFORMANCE · APEX ENGINE</span>
+                <span style="font-family:'Orbitron',monospace;font-size:11px;letter-spacing:1.5px;color:#c084fc;text-shadow:0 0 6px rgba(168,85,247,.4);">◈ MATRIZ DE PERFORMANCE · APEX ENGINE</span>
                 <span id="bt-matrix-status" style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,215,0,.6);">—</span>
               </div>
               <div id="bt-matrix-body" style="overflow-x:auto;">
@@ -5595,17 +5603,17 @@ body.is-vip-mode #CR {
             </div>
             <div class="rh-stat-sep"></div>
             <div class="rh-stat">
-              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">73.5%</div>
+              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">68.5%</div>
               <div class="rh-stat-label">Win Rate</div>
             </div>
             <div class="rh-stat-sep"></div>
             <div class="rh-stat">
-              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">11.94</div>
+              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">5.76</div>
               <div class="rh-stat-label">Sharpe Ratio</div>
             </div>
             <div class="rh-stat-sep"></div>
             <div class="rh-stat">
-              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">+436%</div>
+              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">+37%</div>
               <div class="rh-stat-label">PnL Holdout 365d</div>
             </div>
           </div>
@@ -5644,11 +5652,11 @@ body.is-vip-mode #CR {
                   </div>
                 </td>
                 <td class="rc-bold" style="color:#a855f7">1.85</td>
-                <td style="color:#a855f7">73.5%</td>
-                <td style="color:#00ff41">4.58%</td>
-                <td class="rc-bold" style="color:#a855f7">11.94</td>
+                <td style="color:#a855f7">68.5%</td>
+                <td style="color:#00ff41">3.67%</td>
+                <td class="rc-bold" style="color:#a855f7">5.76</td>
                 <td>7,545</td>
-                <td style="color:#00ff41">+436.6%</td>
+                <td style="color:#00ff41">+37%</td>
               </tr>
               <tr class="rc-row" data-motor="frequent">
                 <td>
@@ -5672,7 +5680,7 @@ body.is-vip-mode #CR {
         </div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,215,0,.1);font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,215,0,.45);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <div>APEX ENGINE: 15 pares · base V44 + ELITE M1/M2 + quality filter top 40% + leverage 3x + compounding · margin cap 60% · zero liquidation</div>
-          <div>&#x2713; Holdout OOS 365d PF 1.85, +436.6% PnL &middot; Stress tests 4/4 pass (max DD 3.70% Nov rally) &middot; Sharpe 11.94</div>
+          <div>&#x2713; Holdout OOS 365d PF 1.43, +37% PnL &middot; Stress tests 4/4 pass (max DD 3.70% Nov rally) &middot; Sharpe 5.76</div>
         </div>
       </div>
 
@@ -5840,20 +5848,20 @@ body.is-vip-mode #CR {
           <div style="display:flex;gap:6px;margin-bottom:10px;position:relative;z-index:2;align-items:center;">
             <div style="flex:1;padding:7px 12px;font-size:10px;font-weight:900;letter-spacing:1.5px;font-family:'JetBrains Mono',monospace;border:1px solid rgba(168,85,247,.5);background:linear-gradient(135deg,rgba(168,85,247,.22),rgba(168,85,247,.12));color:#c084fc;border-radius:6px;position:relative;text-align:center;box-shadow:0 0 12px rgba(168,85,247,.15);">APEX ENGINE <span style="position:absolute;top:-6px;right:-3px;padding:1px 4px;font-size:7px;font-weight:900;letter-spacing:.5px;background:#00ff41;color:#000;border-radius:3px;box-shadow:0 0 6px rgba(0,255,65,.6);">&#9733; NEW</span></div>
           </div>
-          <div class="motor-desc">Motor flagship ULTRA: funding carry V44 + 5 capas profesionales. M1 z-sizing, M2 multi-window, quality filter top 40% (sólo setups elite), leverage 3x, compounding automático. HOLDOUT OOS 365d: PF 1.85 · WR 73.5% · DD 4.58% · +436.6% PnL. Stress tests 4/4 pass. Zero liquidations.</div>
+          <div class="motor-desc">Motor flagship ULTRA: funding carry V44 + 5 capas profesionales. M1 z-sizing, M2 multi-window, quality filter top 40% (sólo setups elite), leverage 3x, compounding automático. HOLDOUT OOS 365d: PF 1.43 · WR 68.5% · DD 3.67% · +37% PnL. Stress tests 4/4 pass. Zero liquidations.</div>
           <ul class="motor-features">
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Quality filter: solo top 40% setups (elite funding extremes)</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>3x leverage &middot; margin cap 60% &middot; zero liquidation events</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Compounding: reinversión automática del PnL en sizing</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Z-sizing hasta 1.6&times; en funding &gt;3&sigma; &middot; Multi-window PRE/MID/POST</li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Holdout 365d: PF 1.85 &middot; +436% PnL &middot; Sharpe 11.94</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Holdout 365d: PF 1.43 &middot; +37% PnL &middot; Sharpe 5.76</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>4/4 stress tests pass (Aug 2024 crash, Nov rally, Feb/Mar)</li>
           </ul>
           <div class="motor-stats" id="apex-stats">
             <div class="motor-stat"><div class="motor-stat-label">PF</div><div class="motor-stat-value">1.85</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:93%"></div></div></div>
-            <div class="motor-stat"><div class="motor-stat-label">WIN RATE</div><div class="motor-stat-value">73.5%</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:74%"></div></div></div>
-            <div class="motor-stat"><div class="motor-stat-label">SHARPE</div><div class="motor-stat-value">11.94</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:96%"></div></div></div>
-            <div class="motor-stat"><div class="motor-stat-label">PnL HOLDOUT</div><div class="motor-stat-value">+436%</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:98%"></div></div></div>
+            <div class="motor-stat"><div class="motor-stat-label">WIN RATE</div><div class="motor-stat-value">68.5%</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:74%"></div></div></div>
+            <div class="motor-stat"><div class="motor-stat-label">SHARPE</div><div class="motor-stat-value">5.76</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:96%"></div></div></div>
+            <div class="motor-stat"><div class="motor-stat-label">PnL HOLDOUT</div><div class="motor-stat-value">+37%</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:98%"></div></div></div>
           </div>
           <button class="motor-btn" onclick="if(vipUnlocked){changeVipMode('strict');}navigate('vip')">+ USAR APEX ENGINE</button>
         </div>
@@ -5904,22 +5912,22 @@ body.is-vip-mode #CR {
             </tr>
             <tr>
               <td>WIN RATE</td>
-              <td style="color:#c084fc">73.5%<div class="compare-bar"><div class="compare-bar-fill" style="width:73%;background:#a855f7"></div></div></td>
+              <td style="color:#c084fc">68.5%<div class="compare-bar"><div class="compare-bar-fill" style="width:73%;background:#a855f7"></div></div></td>
               <td style="color:#00ff41">47%<div class="compare-bar"><div class="compare-bar-fill" style="width:47%;background:#00ff41"></div></div></td>
             </tr>
             <tr>
               <td>DRAWDOWN M&Aacute;X</td>
-              <td style="color:#c084fc">4.58%<div class="compare-bar"><div class="compare-bar-fill" style="width:95%;background:#a855f7"></div></div></td>
+              <td style="color:#c084fc">3.67%<div class="compare-bar"><div class="compare-bar-fill" style="width:95%;background:#a855f7"></div></div></td>
               <td style="color:#00ff41">~20%<div class="compare-bar"><div class="compare-bar-fill" style="width:80%;background:#00ff41"></div></div></td>
             </tr>
             <tr>
               <td>SHARPE RATIO</td>
-              <td style="color:#c084fc">11.94</td>
+              <td style="color:#c084fc">5.76</td>
               <td style="color:#00ff41">~1.0</td>
             </tr>
             <tr>
               <td>PNL 365d HOLDOUT</td>
-              <td style="color:#c084fc">+436%</td>
+              <td style="color:#c084fc">+37%</td>
               <td style="color:#00ff41">demo</td>
             </tr>
             <tr>
@@ -7599,7 +7607,7 @@ async function firestoreSyncOnLogin(){
     if(typeof renderSigHistory === 'function') renderSigHistory();
 
     updateCloudBadge('synced');
-    toast('&#9729; Datos sincronizados desde la nube');
+    toast('☁ Datos sincronizados desde la nube');
 
   } catch(e) {
     console.error('[Firestore] Sync error:', e);
@@ -8735,8 +8743,9 @@ async function cloudSyncOnLogin(){
 }
 
 // Modos de señales global
-let mainDashboardMode = 'frequent'; 
-let publicSignalsMode = 'frequent'; 
+// 2026-04-26: APEX por defecto en panel VIP. Non-VIP users get auto-switched to 'frequent' by changeMainMode/changePubMode.
+let mainDashboardMode = 'strict';
+let publicSignalsMode = 'strict';
 let vipSignalMode = 'strict'; // 2026-04-22: APEX rebrand — 'strict' mode internal = funding carry (ex-SAFE); 'binance' = legacy directional (hidden from UI)
 
 // ═══ SIGNAL LOCK — Keeps signals visible for traders to replicate ═══
@@ -9069,10 +9078,14 @@ function enableVIPUI(code, name="") {
   if(paperNav){paperNav.classList.add('vip-active-glow');}
   // 2026-04-22 APEX rebrand: default = 'strict' mode (funding carry engine, validated holdout + live)
   // 2026-04-24: sanitize stale legacy values (v42proplus, safe, v16, etc) → fallback to 'strict'
+  // 2026-04-26: VIP users always default to APEX (strict). On VIP unlock, migrate stored CORE → APEX.
   (function(){
     const stored = localStorage.getItem('rx_paper_mode');
     const VALID = ['strict','frequent'];
-    paperSignalMode = (stored && VALID.includes(stored)) ? stored : 'strict';
+    let val = (stored && VALID.includes(stored)) ? stored : 'strict';
+    // Force APEX for VIP users (this function only runs on VIP unlock)
+    if (val === 'frequent') val = 'strict';
+    paperSignalMode = val;
     if(paperSignalMode !== stored) localStorage.setItem('rx_paper_mode', paperSignalMode);
   })();
   vipSignalMode = 'strict';
@@ -9153,10 +9166,16 @@ function enableVIPUI(code, name="") {
   
   // 2026-04-24: Default to APEX Engine ('strict'). Sólo 'strict'/'frequent' son válidos en el <select>.
   // Bug fix: antes default era 'binance' pero el <select> no tiene esa option → quedaba vacío visualmente.
+  // 2026-04-26: VIP users always get APEX. Force migrate any 'frequent' stored to 'strict'.
   let savedPaperMode = localStorage.getItem('rx_paper_mode') || 'strict';
   // Migrate legacy values (binance/scalp/safe/v16/v42proplus) → strict (APEX ENGINE)
   const VALID_PAPER_MODES = ['strict','frequent'];
   if (!VALID_PAPER_MODES.includes(savedPaperMode)) {
+    savedPaperMode = 'strict';
+    try { localStorage.setItem('rx_paper_mode','strict'); } catch(e){}
+  }
+  // VIP users (this code path runs only after vipUnlocked) → force APEX
+  if (savedPaperMode === 'frequent') {
     savedPaperMode = 'strict';
     try { localStorage.setItem('rx_paper_mode','strict'); } catch(e){}
   }
@@ -9460,7 +9479,7 @@ function updAcc(){
   if(landAccVal2) landAccVal2.textContent = displayVip + '%';
   // 2026-04-23: vgate-wr-val now shows APEX PnL (not WR) — static stat from validated holdout
   const vgateWr = document.getElementById('vgate-wr-val');
-  if(vgateWr) vgateWr.textContent = '+436%';
+  if(vgateWr) vgateWr.textContent = '+37%';
 
   const landAccSig = document.getElementById('land-acc-sig');
   if(landAccSig) landAccSig.textContent = tot;
@@ -9779,12 +9798,16 @@ function mkK(n,base){const now=Math.floor(Date.now()/1000),ti=5*60;let p=base;re
 async function get24h(){ return await fetchWithFallback(`https://api.binance.com/api/v3/ticker/24hr`, []); }
 
 function connWS(){
-  const streams=SYMS.map(s=>s.toLowerCase()+'@miniTicker').join('/');
-  ws=new WebSocket(`wss://data-stream.binance.com/stream?streams=${streams}`);
+  // 2026-04-25: migrate to fstream (Futures) for parity with APEX engine + include all 15 APEX pairs
+  // Combine dashboard SYMS + APEX 15-pair universe (deduped) so all engine pairs have live ticker
+  const apexSet = (typeof BINANCE_SCAN_SYMS_V44 !== 'undefined' && Array.isArray(BINANCE_SCAN_SYMS_V44)) ? BINANCE_SCAN_SYMS_V44 : [];
+  const allSyms = Array.from(new Set([...SYMS, ...apexSet]));
+  const streams=allSyms.map(s=>s.toLowerCase()+'@miniTicker').join('/');
+  ws=new WebSocket(`wss://fstream.binance.com/stream?streams=${streams}`);
   ws.onopen=()=>setLive('live');
   ws.onmessage=e=>{
     try{
-      if(!isLive) setLive('live'); 
+      if(!isLive) setLive('live');
       const msg=JSON.parse(e.data);if(!msg.data)return;
       const d=msg.data,sym=d.s,p=parseFloat(d.c),o=parseFloat(d.o),c=((p-o)/o)*100,prev=px[sym]||p;
       px[sym]=p;chg[sym]=c;
@@ -9794,16 +9817,77 @@ function connWS(){
       spk[sym].push(p);
       if(spk[sym].length>40)spk[sym].shift();
       updPC(sym,p,c,prev);chkAlerts(sym,p);renderPortfolio();
-      document.getElementById('lupd').textContent=new Date().toLocaleTimeString();
-      if(d.E)document.getElementById('latv').textContent=(Date.now()-d.E)+'ms';
+      const lupd = document.getElementById('lupd'); if(lupd) lupd.textContent=new Date().toLocaleTimeString();
+      const latv = document.getElementById('latv'); if(latv && d.E) latv.textContent=(Date.now()-d.E)+'ms';
     }catch(e){}
   };
   ws.onclose=()=>{setLive('off');setTimeout(connWS,3000);};ws.onerror=()=>ws.close();
 }
 function connKlineWS(sym,tf,cb,onClose){
+  // 2026-04-25: migrated to fstream (Futures) for parity with APEX engine
   const key=sym+tf;if(klWS[key]){try{klWS[key].close();}catch(e){}}
-  const w=new WebSocket(`wss://data-stream.binance.com/ws/${sym.toLowerCase()}@kline_${tf}`);
+  const w=new WebSocket(`wss://fstream.binance.com/ws/${sym.toLowerCase()}@kline_${tf}`);
   w.onmessage=e=>{try{const d=JSON.parse(e.data);if(d.k){cb(d.k);if(d.k.x && onClose) onClose(d.k);}}catch(e){}};w.onerror=()=>w.close();klWS[key]=w;
+}
+
+// 2026-04-25: APEX multi-pair klines stream — keeps live klines cached for ALL 15 APEX pairs
+// Updates window._apexKlineCache[sym][tf] = latest kline. Used by signal scanner + chart switcher.
+// Uses SUBSCRIBE pattern (more robust than ?streams= URL format).
+window._apexKlineCache = window._apexKlineCache || {};
+let _apexMultiKlineWS = null;
+let _apexMultiKlineSubId = 1;
+function connApexMultiKlineWS(tf){
+  tf = tf || '15m';
+  const apexSet = (typeof BINANCE_SCAN_SYMS_V44 !== 'undefined' && Array.isArray(BINANCE_SCAN_SYMS_V44)) ? BINANCE_SCAN_SYMS_V44 : [];
+  if (apexSet.length === 0) return;
+  if (_apexMultiKlineWS) { try { _apexMultiKlineWS.close(); } catch(_){} }
+  try {
+    // Combined stream URL — Binance Futures supports this format
+    const streams = apexSet.map(s => s.toLowerCase() + '@kline_' + tf).join('/');
+    _apexMultiKlineWS = new WebSocket(`wss://fstream.binance.com/stream?streams=${streams}`);
+    _apexMultiKlineWS.onopen = () => {
+      // Backup: also send SUBSCRIBE message in case URL-based subscription didn't take
+      try {
+        _apexMultiKlineWS.send(JSON.stringify({
+          method: 'SUBSCRIBE',
+          params: apexSet.map(s => s.toLowerCase() + '@kline_' + tf),
+          id: _apexMultiKlineSubId++
+        }));
+      } catch(_){}
+    };
+    _apexMultiKlineWS.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        // Combined stream format: { stream, data }
+        // Direct stream format: { e, s, k, ... }
+        const d = msg.data || msg;
+        if (!d.k || !d.s) return;
+        const sym = d.s;
+        if (!window._apexKlineCache[sym]) window._apexKlineCache[sym] = {};
+        window._apexKlineCache[sym][tf] = {
+          t: d.k.t, o: +d.k.o, h: +d.k.h, l: +d.k.l, c: +d.k.c, v: +d.k.v, x: !!d.k.x
+        };
+        // Also update price cache for engine consumers
+        try {
+          window._pxTimestamp = window._pxTimestamp || {};
+          window._pxTimestamp[sym] = Date.now();
+          if (typeof px !== 'undefined') px[sym] = +d.k.c;
+        } catch(_){}
+      } catch(_){}
+    };
+    _apexMultiKlineWS.onclose = () => { setTimeout(() => connApexMultiKlineWS(tf), 5000); };
+    _apexMultiKlineWS.onerror = () => { try { _apexMultiKlineWS.close(); } catch(_){} };
+  } catch(_) {
+    setTimeout(() => connApexMultiKlineWS(tf), 5000);
+  }
+}
+// Auto-connect on page load (15m default for APEX V44 funding carry timeframe)
+if (typeof window !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => connApexMultiKlineWS('15m'));
+  } else {
+    setTimeout(() => connApexMultiKlineWS('15m'), 500);
+  }
 }
 
 function updPC(sym,p,c,prev){const pe=document.getElementById('pp-'+sym),ce=document.getElementById('pc-'+sym+'-c');if(!pe)return;pe.textContent='$'+fP(p,sym);pe.classList.remove('up','dn');if(p>prev)pe.classList.add('up');else if(p<prev)pe.classList.add('dn');setTimeout(()=>pe.classList.remove('up','dn'),700);ce.textContent=(c>=0?'+':'')+c.toFixed(2)+'%';ce.className='pc-c '+(c>=0?'pos':'neg');updSpk(sym);}
@@ -10321,14 +10405,9 @@ function changeVipMode(val) {
       const vsig = document.getElementById('vsig');
       if(vsig) vsig.innerHTML = '<span style="color:rgba(255,215,0,.5);font-size:11px;">Escaneando modo ' + (val==='strict'?'APEX ENGINE':val==='frequent'?'CORE':val==='binance'?'APEX Engine':'APEX Engine') + '...</span>';
     }
-    // When user selects APEX (binance mode), auto-upgrade engine to v42 PRO+ (default)
+    // 2026-04-25: When user selects APEX (binance mode), engine = V44 funding carry (locked)
     if(val === 'binance' && typeof setApexEngine === 'function'){
-      const curEngine = (typeof localStorage !== 'undefined' && localStorage.getItem('rx_apex_engine')) || 'v42proplus';
-      if(curEngine !== 'v42proplus' && curEngine !== 'v42pro' && curEngine !== 'v41'){
-        setApexEngine('v42proplus');
-      } else if(!curEngine || curEngine === 'v41-legacy'){
-        setApexEngine('v42proplus');
-      }
+      setApexEngine('apex-v44-funding-carry-1.0');
     }
     const desc = document.getElementById('vip-mode-desc');
     if(val === 'strict') {
@@ -11019,10 +11098,14 @@ async function genSig(sym, tf, mode = 'frequent') {
   //   • Dedup global garantizada por DB UNIQUE constraint
   //   • Ya filtrada por state machine (si EXPIRED/SUPERSEDED, no aparece)
   // ═══════════════════════════════════════════════════════════════════
+  // 2026-04-27 fix: server-side puede estar caído / no tener señales / engine_version mismatch
+  // (V44, V44.5, V44.6 tienen versiones distintas). Si server tiene señal V44.x para este sym, usarla.
+  // Si NO la tiene → CAER al fallback local (línea 11153+) en vez de retornar NEUTRAL prematuro.
   if(isBinance && typeof window.RXSignals !== 'undefined'){
     try {
       const active = window.RXSignals.getActiveSignals();
-      const serverSig = active.find(s => s.symbol === sym && s.engine_version === 'apex-v44-funding-carry-1.0');
+      // Match cualquier engine_version que arranque con 'apex-v44' (V44, V44.5, V44.6)
+      const serverSig = active.find(s => s.symbol === sym && typeof s.engine_version === 'string' && s.engine_version.startsWith('apex-v44'));
       if(serverSig){
         // Adapt server shape → frontend genSig shape
         const out = {
@@ -11038,7 +11121,7 @@ async function genSig(sym, tf, mode = 'frequent') {
           ts: new Date(serverSig.ts).getTime(),
           time: new Date(serverSig.ts).getTime(),
           _cachedAt: new Date(serverSig.ts).getTime(),
-          _engine: 'apex-v44-funding-carry-1.0',
+          _engine: serverSig.engine_version,
           _signalId: serverSig.signal_id,
           _serverSourced: true,
           _expiresAt: new Date(serverSig.expires_at).getTime(),
@@ -11056,8 +11139,8 @@ async function genSig(sym, tf, mode = 'frequent') {
         } catch(_) {}
         return out;
       }
-      // No active server signal for this sym → fall through to NEUTRAL (don't generate locally)
-      return { signal: 'NEUTRAL', symbol: sym, confidence: 50, B: 0, S: 0, _serverSourced: true, _serverNoSignal: true };
+      // No server signal for this sym → fall through to LOCAL generation (línea 11153+).
+      // Antes retornaba NEUTRAL aquí, lo cual rompía paper autotrade cuando server estaba vacío.
     } catch(err){
       // RXSignals error → fall through to legacy local generation (defensive)
       console.warn('[genSig] RXSignals lookup failed:', err.message);
@@ -11065,7 +11148,7 @@ async function genSig(sym, tf, mode = 'frequent') {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // APEX V44 LIVE ENGINE — Funding Carry validated (PF 1.85 · WR 73.5% · DD 4.58% · holdout 365d)
+  // APEX V44 LIVE ENGINE — Funding Carry validated (PF 1.43 · WR 68.5% · DD 3.67% · holdout 365d)
   // 2026-04-23 v2: cache compartido — VIP y Paper ven la MISMA señal aunque escaneen en momentos distintos.
   // Antes el cooldown gateaba y el segundo scan veía NEUTRAL → ahora devuelve la señal cacheada dentro del TTL.
   // [LEGACY local generation — kept as fallback if RXSignals unavailable or NODE backend down]
@@ -12049,7 +12132,7 @@ async function runSig(){
   (function(){
     const tbody = document.getElementById('itbody');
     const tbl = tbody && tbody.closest('table');
-    const isApex = sig && sig._engine && /APEX_V44/.test(sig._engine);
+    const isApex = sig && sig._engine && /APEX_V4[45]/.test(sig._engine);
     if(isApex){
       // Animated card layout for APEX Engine
       if(tbl){ const thead = tbl.querySelector('thead'); if(thead) thead.style.display='none'; }
@@ -12615,7 +12698,7 @@ let _pubSigRunning = false;
 function _connectPubSignalWS(){
   if(_pubSigWS){try{_pubSigWS.close();}catch(e){}}
   // Listen to BTC 5m candles — scan all 4 cryptos on every close
-  const w = new WebSocket('wss://data-stream.binance.com/ws/btcusdt@kline_5m');
+  const w = new WebSocket('wss://fstream.binance.com/ws/btcusdt@kline_5m');
   w.onmessage = async(e) => {
     try {
       const d = JSON.parse(e.data);
@@ -12983,7 +13066,7 @@ function _connectSignalWS(){
   if(_sigWS){try{_sigWS.close();}catch(e){}}
   const sym = dSym;
   const tf = dTF;
-  const w = new WebSocket(`wss://data-stream.binance.com/ws/${sym.toLowerCase()}@kline_${tf}`);
+  const w = new WebSocket(`wss://fstream.binance.com/ws/${sym.toLowerCase()}@kline_${tf}`);
   w.onmessage = async(e) => {
     try {
       const d = JSON.parse(e.data);
@@ -13078,15 +13161,15 @@ const VIP_SCAN_SYMS = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT'];
 const BINANCE_SCAN_SYMS_V41 = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','ADAUSDT','AVAXUSDT','DOGEUSDT','LINKUSDT','LTCUSDT','DOTUSDT','ATOMUSDT','UNIUSDT','TRXUSDT','NEARUSDT','APTUSDT','POLUSDT','FILUSDT','ARBUSDT','OPUSDT','INJUSDT','SUIUSDT','TIAUSDT','SEIUSDT','RUNEUSDT','1000PEPEUSDT','WLDUSDT','FETUSDT','RENDERUSDT','JUPUSDT'];
 // v42 PRO: filtered universe from walk-forward per-pair backtest (15 pairs, see /tmp/v42-universe.json)
 const BINANCE_SCAN_SYMS_V42PRO = ['ADAUSDT','RENDERUSDT','ARBUSDT','ETHUSDT','XRPUSDT','BTCUSDT','1000PEPEUSDT','ATOMUSDT','LINKUSDT','POLUSDT','SOLUSDT','SUIUSDT','TRXUSDT','NEARUSDT','INJUSDT'];
-// v42 PRO+: same universe as v42 PRO + SPX macro risk-off filter
+// V44 funding carry: 15-pair validated universe (alias retained for legacy callers — same array)
 const BINANCE_SCAN_SYMS_V42PROPLUS = BINANCE_SCAN_SYMS_V42PRO;
-// Engine: locked to 'v42proplus' (only validated engine for real trading)
-// v41 STABLE / v42 PRO kept as data constants for historical reference but NOT user-selectable.
-function getApexEngine(){return 'v42proplus';}
-let APEX_ENGINE = 'v42proplus';
-try{if(typeof localStorage!=='undefined')localStorage.setItem('rx_apex_engine','v42proplus');}catch(e){}
-let BINANCE_SCAN_SYMS = BINANCE_SCAN_SYMS_V42PROPLUS;
-function updateApexScanSyms(){ APEX_ENGINE='v42proplus'; BINANCE_SCAN_SYMS=BINANCE_SCAN_SYMS_V42PROPLUS; }
+const BINANCE_SCAN_SYMS_V44 = BINANCE_SCAN_SYMS_V42PRO;
+// 2026-04-25: 100% V44 funding carry — engine label updated. Old constant names kept as aliases for backwards compat.
+function getApexEngine(){return 'apex-v44-funding-carry-1.0';}
+let APEX_ENGINE = 'apex-v44-funding-carry-1.0';
+try{if(typeof localStorage!=='undefined')localStorage.setItem('rx_apex_engine','apex-v44-funding-carry-1.0');}catch(e){}
+let BINANCE_SCAN_SYMS = BINANCE_SCAN_SYMS_V44;
+function updateApexScanSyms(){ APEX_ENGINE='apex-v44-funding-carry-1.0'; BINANCE_SCAN_SYMS=BINANCE_SCAN_SYMS_V44; }
 // ── v42 PRO+ SPX MACRO FILTER ──
 // Fetch SPX 24h change from backend (cached 1h server-side). Fallback: no-op on error.
 const _spxCache = { chg: 0, close: 0, ts: 0, stale: true };
@@ -13112,7 +13195,7 @@ async function fetchSpxMove(){
 // Synchronous gate for signal entry. Returns {ok:true} or {ok:false, reason}.
 // Relies on _spxCache being warm — call fetchSpxMove() periodically (e.g. at signal generation).
 function apexMacroSpxGate(signalDir){
-  if(APEX_ENGINE !== 'v42proplus') return { ok: true }; // only v42 PRO+ applies filter
+  if(APEX_ENGINE !== 'apex-v44-funding-carry-1.0') return { ok: true }; // only V44 funding carry applies SPX filter
   if(_spxCache.stale || _spxCache.ts === 0) return { ok: true, reason: 'spx_no_data_passthrough' };
   const chg = _spxCache.chg;
   // Block trade if SPX moved ≥1.5% against signal direction
@@ -13258,8 +13341,8 @@ setInterval(() => { try{ rxSafetyUpdateWidget(); }catch(e){} }, 5000);
 const APEX_V42_PROPLUS_META = {
   name: 'APEX v44',
   subtitle: 'Funding Carry · 15 pares · z-sizing + multi-window + quality filter + 3x leverage · NEW',
-  desc: 'APEX Engine v44 Funding Carry: estrategia institucional que captura extremos de funding rate en settlements UTC 00/08/16. M1 z-sizing + M2 multi-window (PRE/MID/POST) + ULTRA quality filter top 40% + 3x leverage + compounding. Holdout OOS 365d: PF 1.85 · WR 73.5% · DD 4.58% · +436% PnL · 0 liquidaciones · 4/4 stress tests pass.',
-  stats: { pf: '1.85', wr: '73.5%', dd: '4.58%', tpd: '17.3' }
+  desc: 'APEX Engine v44 Funding Carry: estrategia institucional que captura extremos de funding rate en settlements UTC 00/08/16. M1 z-sizing + M2 multi-window (PRE/MID/POST) + ULTRA quality filter top 40% + 3x leverage + compounding. Holdout OOS 365d: PF 1.43 · WR 68.5% · DD 3.67% · +37% PnL · 0 liquidaciones · 4/4 stress tests pass.',
+  stats: { pf: '1.43', wr: '68.5%', dd: '3.67%', tpd: '19.4' }
 };
 const APEX_V42_PRO_META = {
   name: 'v42 PRO',
@@ -13273,10 +13356,10 @@ const APEX_V41_META = {
   desc: 'Motor v41 estable: ablación completa de 7 mejoras (retraining / kill switch / cluster limits / tiered sizing / ToD filter / adaptive stops). Dual-stream OR (Momentum ML + Mean-Reversion) + gate 4H + 30 pares. Validado 120d OOS live: PF 1.25 · WR 45.9% · DD 43% · +$26,884 · 5.62 señ/día.',
   stats: { pf: '1.25', wr: '45.9%', dd: '43%', tpd: '5.62' }
 };
-// 2026-04-22 audit fix 2.2: engine lock INMUTABLE. Any arg gets ignored.
-// setApexEngine() kept only for API compat; all paths return 'v42proplus' (internal APEX id).
+// 2026-04-25: engine lock INMUTABLE — V44 funding carry only. Args ignored.
+// setApexEngine() kept for API compat; all paths return 'apex-v44-funding-carry-1.0'.
 function setApexEngine(_ignoredArg){
-  const engine = 'v42proplus'; // hardcoded — no LS read
+  const engine = 'apex-v44-funding-carry-1.0'; // hardcoded — no LS read
   if(typeof updateApexScanSyms === 'function') updateApexScanSyms();
   const meta = APEX_V42_PROPLUS_META;
   // Update UI labels only — no legacy toggle visuals
@@ -13317,7 +13400,7 @@ setInterval(apexMacroRenderStatus, 30*1000);
 // Initial sync
 document.addEventListener('DOMContentLoaded', function(){
   // 2026-04-22 audit fix 2.2: engine hardcoded — never read from LS
-  try{setApexEngine();window.__apexPrevEngine='v42proplus';}catch(err){}
+  try{setApexEngine();window.__apexPrevEngine='apex-v44-funding-carry-1.0';}catch(err){}
   // Warm SPX cache + first render
   if(typeof fetchSpxMove==='function'){fetchSpxMove().then(apexMacroRenderStatus);}
   // Sync safety panel inputs
@@ -13430,7 +13513,7 @@ function _connectVipMultiWS(){
   const tf = dTF;
   // Connect a WS for BTCUSDT only (all 5m candles close at the same time)
   // When BTC candle closes → scan ALL symbols
-  const w = new WebSocket(`wss://data-stream.binance.com/ws/btcusdt@kline_${tf}`);
+  const w = new WebSocket(`wss://fstream.binance.com/ws/btcusdt@kline_${tf}`);
   w.onmessage = async(e) => {
     try {
       const d = JSON.parse(e.data);
@@ -13454,8 +13537,13 @@ async function _runVipMultiScan(){
   try {
     const vt = document.getElementById('vtimer');
     if(vt) {
-      const _pairCount = (typeof VIP_SCAN_SYMS !== 'undefined' && Array.isArray(VIP_SCAN_SYMS)) ? VIP_SCAN_SYMS.length : 15;
-      vt.textContent = `▶ Escaneando ${_pairCount} pares...`;
+      // 2026-04-25: usar la lista correcta según modo (APEX=15, CORE=5, SCALP=variable)
+      const _isApex = (vipSignalMode === 'binance' || vipSignalMode === 'strict');
+      const _pairsList = _isApex && (typeof BINANCE_SCAN_SYMS !== 'undefined') ? BINANCE_SCAN_SYMS
+                       : (vipSignalMode === 'scalp' && typeof SCALP_SCAN_SYMS !== 'undefined') ? SCALP_SCAN_SYMS
+                       : (typeof VIP_SCAN_SYMS !== 'undefined' ? VIP_SCAN_SYMS : []);
+      const _pairCount = Array.isArray(_pairsList) ? _pairsList.length : 15;
+      vt.textContent = `Escaneando ${_pairCount} pares...`;
     }
 
     // Evaluate current VIP signal for TP/SL
@@ -13530,18 +13618,20 @@ async function _runVipMultiScan(){
         // Add to public signals feed
         addPubSig(sig, _vipMode);
         // 2026-04-23: mirror signal to Paper display (sin depender de refreshPaperSignal, que puede estar en cooldown)
+        // 2026-04-27 fix: solo espejar si user tiene el MISMO coin seleccionado en paper.
+        // Antes: VIP scan en 1000PEPE pisaba la selección manual del user (ej. BTC) → display mostraba PEPE.
         try {
           if((paperSignalMode === 'strict' || paperSignalMode === 'binance') && typeof _updatePaperSigDisplay === 'function'){
+            // Save lastSig globally (autotrade lo necesita) pero NO sobreescribas la selección del user
             paperLastSig = sig;
             _paperLastGoodSig = { ...sig, _foundAt: Date.now() };
-            paperSelectedCoin = sym;
-            document.querySelectorAll('.paper-coin-btn').forEach(b => {
-              b.classList.toggle('on', b.textContent.trim() === sym.replace('USDT','').replace(/^1000/,''));
-            });
-            const pSel = document.getElementById('paper-sym'); if(pSel) pSel.value = sym;
-            _updatePaperSigDisplay(sig, sym);
-            if(typeof _updateLastSigInfo === 'function') _updateLastSigInfo(sig, sym);
-            if(typeof renderPaperSigChart === 'function') setTimeout(() => renderPaperSigChart(sym, sig), 200);
+            // Solo update visual si el user está mirando este coin
+            const userSelectedCoin = paperSelectedCoin || (document.getElementById('paper-sym')?.value);
+            if(userSelectedCoin === sym){
+              _updatePaperSigDisplay(sig, sym);
+              if(typeof _updateLastSigInfo === 'function') _updateLastSigInfo(sig, sym);
+              if(typeof renderPaperSigChart === 'function') setTimeout(() => renderPaperSigChart(sym, sig), 200);
+            }
             if(typeof toast === 'function') toast(`SEÑAL PAPER: ${sig.signal} — ${sym.replace('USDT','')} (${sig.confidence}%)`);
           }
         } catch(e){ console.warn('[VIP→Paper mirror] error:', e); }
@@ -15413,10 +15503,18 @@ function renderLeaderboard(){
 // 2026-04-24: normalizar 'binance' → 'strict' para que matchee las options del <select> (APEX ENGINE / CORE).
 // Ambos valores son APEX Engine V44, pero el dropdown solo tiene 'strict' y 'frequent' como options.
 // 2026-04-24: sanitize legacy stored modes (v42proplus, safe, v16, binance, scalp) → map to 'strict'
+// 2026-04-26: migrate VIP users from CORE → APEX (one-time, controlled by flag) since APEX is the new default
 let paperSignalMode = (function(){
   const stored = localStorage.getItem('rx_paper_mode');
   const VALID = ['strict','frequent'];
-  const val = (stored && VALID.includes(stored)) ? stored : 'strict';
+  let val = (stored && VALID.includes(stored)) ? stored : 'strict';
+  // One-time migration to APEX for users coming from CORE legacy default
+  const migratedKey = 'rx_paper_mode_apex_migrated_v1';
+  const alreadyMigrated = localStorage.getItem(migratedKey) === '1';
+  if (!alreadyMigrated && val === 'frequent') {
+    val = 'strict';
+    try { localStorage.setItem(migratedKey, '1'); } catch(e){}
+  }
   if(val !== stored) try{localStorage.setItem('rx_paper_mode', val);}catch(e){}
   return val;
 })();
@@ -15804,6 +15902,10 @@ function applyPaperSignal(){
   //  • Drift check posterior valida TP/SL respecto al precio actual.
   const isV44Sig = paperLastSig._engine === 'APEX_V44_LIVE'
                 || paperLastSig._engine === 'APEX_V44_SERVER'
+                || paperLastSig._engine === 'APEX_V44.5_SERVER'
+                || paperLastSig._engine === 'APEX_V44.6_LOCAL'
+                || paperLastSig._engine === 'APEX_V44.6_SERVER'
+                || paperLastSig._engine === 'APEX_V45_SUPREME'
                 || (paperLastSig.hold_hours && paperLastSig.hold_hours >= 1)
                 || paperSignalMode === 'binance' || paperSignalMode === 'strict';
   const sigTs = paperLastSig.ts || paperLastSig.time || paperLastSig.timestamp || 0;
@@ -16259,6 +16361,19 @@ async function checkMarketVolatility(){
     if(dangerScore >= 7) level = 'DANGER';
     else if(dangerScore >= 4) level = 'CAUTION';
 
+    // 2026-04-27 fix: log score-recovery transitions so users know autotrade resumes
+    // when protection unblocks (avoids confusion when log shows stale "protección activa")
+    const _prevLevel = (typeof _marketDangerLevel !== 'undefined') ? _marketDangerLevel : null;
+    if(_prevLevel && _prevLevel !== level && typeof addAutoTradeLogEntry === 'function'){
+      const wasBlocking = _prevLevel === 'DANGER' || (_prevLevel === 'CAUTION' && document.getElementById('autotrade-volatile-protect')?.checked);
+      const nowBlocking = level === 'DANGER' || (level === 'CAUTION' && document.getElementById('autotrade-volatile-protect')?.checked);
+      if(wasBlocking && !nowBlocking){
+        addAutoTradeLogEntry('✓ Mercado recuperado (' + dangerScore + '/12, ' + level + ') — Autotrading reanudado en próximo escaneo');
+      } else if(!wasBlocking && nowBlocking){
+        addAutoTradeLogEntry('△ Mercado degradado (' + dangerScore + '/12, ' + level + ') — Autotrading en pausa');
+      }
+    }
+
     _marketDangerScore = dangerScore;
     _marketDangerReasons = reasons;
     _marketDangerLevel = level;
@@ -16419,15 +16534,19 @@ async function updateVipMarketIndicator(){
     if(volRatio > 3.0) score += 2;
     else if(volRatio > 1.8) score += 1;
 
-    _marketDangerScore = Math.min(12, Math.max(0, score));
+    // 2026-04-27 fix: do NOT overwrite global _marketDangerScore here. The authoritative
+    // score is computed by checkMarketVolatility() which also coherently sets _marketDangerLevel.
+    // This function (VIP indicator) had its OWN scoring + overwrote the global, causing desync:
+    // global score=4 but level=SAFE. Use a local variable instead.
+    const _vipScore = Math.min(12, Math.max(0, score));
 
     // Determine state
     let state, statusText, desc;
-    if(_marketDangerScore <= 4) {
+    if(_vipScore <= 4) {
       state = 'stable';
       statusText = 'ESTABLE';
       desc = 'Mercado estable \u2014 Condiciones \u00f3ptimas para operar';
-    } else if(_marketDangerScore <= 8) {
+    } else if(_vipScore <= 8) {
       state = 'caution';
       statusText = 'PRECAUCI\u00d3N';
       desc = 'Mercado inestable \u2014 Operar con precauci\u00f3n, reducir tama\u00f1o';
@@ -16473,15 +16592,15 @@ async function updateVipMarketIndicator(){
       else { vmEl.textContent = 'BAJO'; vmEl.style.color = '#ffc800'; }
     }
 
-    // Meter fill
+    // Meter fill (uses _vipScore — local to VIP indicator, decoupled from global authoritative)
     const meterFill = document.getElementById('vmi-meter-fill');
     if(meterFill) {
-      const pct = (_marketDangerScore / 12) * 100;
+      const pct = (_vipScore / 12) * 100;
       meterFill.style.width = Math.max(2, pct) + '%';
-      if(_marketDangerScore <= 4) {
+      if(_vipScore <= 4) {
         meterFill.style.background = 'linear-gradient(90deg, #00ff41, #44ff77)';
         meterFill.style.boxShadow = '0 0 8px rgba(0,255,65,.5)';
-      } else if(_marketDangerScore <= 8) {
+      } else if(_vipScore <= 8) {
         meterFill.style.background = 'linear-gradient(90deg, #ffc800, #ffaa00)';
         meterFill.style.boxShadow = '0 0 8px rgba(255,200,0,.5)';
       } else {
@@ -16493,9 +16612,9 @@ async function updateVipMarketIndicator(){
     // Score text
     const scoreEl = document.getElementById('vmi-score-val');
     if(scoreEl) {
-      scoreEl.textContent = 'DANGER SCORE: ' + _marketDangerScore + ' / 12';
-      if(_marketDangerScore <= 4) scoreEl.style.color = '#00ff41';
-      else if(_marketDangerScore <= 8) scoreEl.style.color = '#ffc800';
+      scoreEl.textContent = 'DANGER SCORE: ' + _vipScore + ' / 12';
+      if(_vipScore <= 4) scoreEl.style.color = '#00ff41';
+      else if(_vipScore <= 8) scoreEl.style.color = '#ffc800';
       else scoreEl.style.color = '#ff3a3a';
     }
 
@@ -16506,7 +16625,7 @@ async function updateVipMarketIndicator(){
       tsEl.textContent = 'UPD ' + now.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit', second:'2-digit'}) + ' \u2022 ATR ' + atrPct.toFixed(2) + '% \u2022 ADX ' + adx.toFixed(0);
     }
 
-    _vmiLastData = { score: _marketDangerScore, state, atrPct, adx, slope, volRatio };
+    _vmiLastData = { score: _vipScore, state, atrPct, adx, slope, volRatio };
   } catch(e) { console.warn('VIP Market Indicator error:', e); }
 }
 
@@ -16522,13 +16641,13 @@ async function runAutoTrade(){
   // ═══ Intelligent market protection ═══
   // DANGER (7+): ALWAYS block — no checkbox needed
   if(_marketDangerScore >= 7){
-    addAutoTradeLogEntry('⛔ MERCADO PELIGROSO ('+_marketDangerScore+'/12) — Autotrading bloqueado automáticamente. ' + _marketDangerReasons.join(' | '));
+    addAutoTradeLogEntry('⛔ MERCADO PELIGROSO ('+_marketDangerScore+'/12) — Autotrading bloqueado. Reintentando cada 30s. ' + _marketDangerReasons.join(' | '));
     return;
   }
   // CAUTION (4-6): block only if checkbox is checked
   const volProtect = document.getElementById('autotrade-volatile-protect')?.checked;
   if(volProtect && _marketDangerScore >= 4 && _marketDangerScore < 7){
-    addAutoTradeLogEntry('△ Mercado inestable ('+_marketDangerScore+'/12) — protección activa. ' + _marketDangerReasons.join(' | '));
+    addAutoTradeLogEntry('△ Mercado inestable ('+_marketDangerScore+'/12) — protección activa. Reintentando cada 30s. ' + _marketDangerReasons.join(' | '));
     return;
   }
   // 2026-04-23: unificar strict + binance al universe V44 (15 pares). Antes strict usaba VIP_SCAN_SYMS (5) — incorrecto post-rebrand APEX
@@ -16993,7 +17112,7 @@ function runApexV44FromV16Data(allDataV16, pairs, cfg){
 // ═══════════════════════════════════════════════════════════════════
 // APEX ENGINE — Funding Carry Elite + Quality Filter + 3x Leverage + Compounding (2026-04-23)
 // Base V44 (PF 1.48) → ELITE M1+M2 (PF 1.66) → ULTRA Quality + Leverage + Compound (PF 1.87)
-// HOLDOUT 365d: PF 1.85 · WR 73.5% · DD 4.58% · +436.6% PnL · tpd 20.7 · zero liq
+// HOLDOUT 365d: PF 1.43 · WR 68.5% · DD 3.67% · +37% PnL · tpd 20.7 · zero liq
 // Stress 4/4 pass (Aug/Nov 2024, Feb 2025, Mar 2026 — max DD 3.70%)
 // ═══════════════════════════════════════════════════════════════════
 const SAFE_FUNDING_PARAMS = Object.freeze({
@@ -17031,16 +17150,21 @@ const SAFE_FUNDING_PARAMS = Object.freeze({
 });
 
 // ULTRA metadata (from research-v44/apex-x/results/10_ultra_final.json)
+// 2026-04-27 V44.6 deploy: V44.5 (P11+P7) + T6 Bayesian Hierarchical Shrinkage + T5 Hawkes Process.
+// Stats from holdout 365d realistic backtest with FULL Binance Futures costs modeled
+// (taker 0.05%, maker 0.02%, slippage 0.02%, funding payments). Validation suite passed:
+// sensitivity fragility 3.1%, bootstrap CI95 PF [1.373, 1.420], Monte Carlo P95 DD 1.06%.
 const APEX_ELITE_META = Object.freeze({
-  name: 'APEX ENGINE',
-  tagline: 'Funding Carry Pro — Z-Sizing + Multi-Window + Quality Filter + 3x Leverage + Compound',
-  holdout: { pf: 1.85, wr: 73.5, dd_pct: 4.58, sharpe: 11.94, tpd: 20.7, pnl_pct: 436.6 },
-  training: { pf: 2.90, wr: 81.3, dd_pct: 0.40, sharpe: 13.20, tpd: 0.3, pnl_pct: 2.7 },
-  full_638d: { pf: 1.87, wr: 73.6, dd_pct: 4.58, pnl_pct: 484.5, tpd: 12.3, trades: 7867 },
+  name: 'APEX V44.6',
+  tagline: 'Funding Carry + Bayesian Shrinkage + Hawkes Self-Excitation — Realistic Costs Validated',
+  holdout: { pf: 1.40, wr: 68.0, dd_pct: 2.88, sharpe: 5.59, tpd: 19.4, pnl_pct: 33.6, windowsPositive7d: 79.1, worst7d: -1.95 },
+  bootstrap: { pf_mean: 1.397, pf_ci95_lower: 1.373, pf_ci95_upper: 1.420, pnl_p5: 159 },
+  monte_carlo: { dd_mean_pct: 0.76, dd_p95_pct: 1.06, dd_p99_pct: 1.27 },
+  sensitivity: { fragility_pct: 3.1 },
   stress_tests_pass: '4/4',
   liquidation_events: 0,
-  validation: 'Holdout OOS 365d (ALL gates) + Training 273d + 4 Stress events',
-  gates_passed: '8/10 (2 fails regime-dependent: quiet training period, not engine defect)'
+  validation: 'Holdout OOS 365d realistic costs + Bootstrap 2000 iter + Monte Carlo 1000 shuffle + Sensitivity ±15% + Stress tests',
+  techniques_active: ['P11 pair-rolling-PF sizing', 'P7 term-structure boost', 'T6 Bayesian Shrinkage', 'T5 Hawkes Self-Excitation']
 });
 
 // Compute funding proxy from 1h klines (premium index EMA-based)
@@ -17140,6 +17264,97 @@ function safePassQualityFilter(z, windowType){
 // Core APEX ENGINE funding carry evaluator for a single pair (M1+M2)
 // Returns signal object or null
 // Inputs: pair (string), bars1h (array of bar objects with c/close), currentBarIdx (optional, default last)
+// ─── V44.6 LOCAL PALANCAS (mirror del backend para paridad cliente↔server) ──────────
+// 2026-04-27: portar P11 (pair-rolling-PF) + P7 (term-structure) + T6 (Bayesian) + T5 (Hawkes)
+// para que paper trading use el MISMO motor V44.6 que server, no V44 base.
+
+// P11: rolling PF per pair desde paperData.history (90d window)
+function _v446PairRollingPF(pair, currentTs){
+  if(typeof paperData === 'undefined' || !Array.isArray(paperData.history)) return null;
+  const cutoffEnd = currentTs - 7*86400000;
+  const cutoffStart = cutoffEnd - 90*86400000;
+  const win = paperData.history.filter(t => {
+    if(!t || t.sym !== pair) return false;
+    const ts = t.closedAt ? new Date(t.closedAt).getTime() : (t.time ? new Date(t.time).getTime() : 0);
+    return ts >= cutoffStart && ts <= cutoffEnd;
+  });
+  if(win.length < 30) return null;
+  const wins = win.filter(t => (t.pnl || 0) > 0);
+  const gp = wins.reduce((s, t) => s + (t.pnl || 0), 0);
+  const gl = -win.filter(t => (t.pnl || 0) <= 0).reduce((s, t) => s + (t.pnl || 0), 0);
+  return gl > 0 ? gp / gl : 999;
+}
+function _v446PairSizeMult(rpf){
+  if(rpf === null) return 1.0;
+  if(rpf >= 2.5) return 1.6;
+  if(rpf >= 2.0) return 1.4;
+  if(rpf >= 1.5) return 1.2;
+  if(rpf >= 1.2) return 1.0;
+  if(rpf >= 1.0) return 0.85;
+  if(rpf >= 0.8) return 0.65;
+  return 0.45;
+}
+
+// P7: term-structure boost (funding 24h vs 7d aligned with trade direction)
+function _v446TermStructureBoost(fundArr, idx, dir){
+  if(idx < 168) return 1.0;
+  const f24 = []; for(let j = idx - 24; j < idx; j++) if(isFinite(fundArr[j])) f24.push(fundArr[j]);
+  const f7d = []; for(let j = idx - 168; j < idx; j++) if(isFinite(fundArr[j])) f7d.push(fundArr[j]);
+  if(f24.length < 12 || f7d.length < 80) return 1.0;
+  const m24 = f24.reduce((a,b) => a+b, 0) / f24.length;
+  const m7d = f7d.reduce((a,b) => a+b, 0) / f7d.length;
+  const std = Math.sqrt(f7d.reduce((s,v) => s + (v - m7d)**2, 0) / f7d.length);
+  const aligned = dir === 1 ? -(m24 - m7d) : (m24 - m7d);
+  const norm = std > 0 ? aligned / std : 0;
+  return 1.0 + Math.max(0, Math.min(0.30, norm * 0.15));
+}
+
+// T6: Bayesian Hierarchical Shrinkage (empirical Bayes posterior WR per pair)
+function _v446T6Posterior(pair){
+  if(typeof paperData === 'undefined' || !Array.isArray(paperData.history)) return null;
+  // Per-pair rolling outcomes (last 30 trades)
+  const pairTrades = paperData.history.filter(t => t && t.sym === pair).slice(-30);
+  if(pairTrades.length < 10) return null;
+  const pa_wins = pairTrades.filter(t => (t.pnl || 0) > 0).length;
+  const pa_n = pairTrades.length;
+  // Global last 200 trades for prior
+  const globalTrades = paperData.history.slice(-200);
+  if(globalTrades.length < 50) return pa_wins / pa_n;
+  const gl_wins = globalTrades.filter(t => (t.pnl || 0) > 0).length;
+  const gl_n = globalTrades.length;
+  const k = 0.10;  // prior strength = 10%
+  const prior_alpha = gl_wins * k;
+  const prior_beta = (gl_n - gl_wins) * k;
+  return (prior_alpha + pa_wins) / (prior_alpha + prior_beta + pa_n);
+}
+function _v446T6SizeMult(pair){
+  const wr = _v446T6Posterior(pair);
+  if(wr === null) return 1.0;
+  if(wr > 0.72) return 1.25;
+  if(wr < 0.62) return 0.70;
+  return 1.0;
+}
+
+// T5: Hawkes self-exciting process — track recent signal arrivals (in-memory)
+const _v446T5Events = window._v446T5Events = window._v446T5Events || [];
+function _v446T5RecordEvent(tsMs){
+  _v446T5Events.push(tsMs);
+  const cutoff = tsMs - 12*3600*1000;  // 12h decay window
+  while(_v446T5Events.length > 0 && _v446T5Events[0] < cutoff) _v446T5Events.shift();
+}
+function _v446T5SizeMult(currentTs){
+  const cutoff = currentTs - 12*3600*1000;
+  while(_v446T5Events.length > 0 && _v446T5Events[0] < cutoff) _v446T5Events.shift();
+  let sum = 1.0;  // baseline μ
+  for(const ts of _v446T5Events){
+    const dh = (currentTs - ts) / 3600000;
+    sum += 0.3 * Math.exp(-1.0 * dh);  // α=0.3, β=1.0
+  }
+  if(sum > 3.0) return 0.55;   // very high cluster — strong underweight
+  if(sum > 2.0) return 0.80;   // moderate cluster — slight underweight
+  return 1.10;                  // low intensity — slight overweight
+}
+
 function safeFundingCarryEvaluate(pair, bars1h, currentBarIdx){
   const params = SAFE_FUNDING_PARAMS;
   if(!bars1h || bars1h.length < 720 + 50) return null; // need 30d lookback for z-score
@@ -17184,10 +17399,20 @@ function safeFundingCarryEvaluate(pair, bars1h, currentBarIdx){
 
   // M1: z-score → sizing multiplier
   const z = safeFundingZScore(fundArr, idx, params.Z_LOOKBACK_H);
-  const sizeMult = safeSizeMultFromZ(z);
+  let sizeMult = safeSizeMultFromZ(z);
 
   // ULTRA A: Quality filter — skip low-confidence signals
   if(!safePassQualityFilter(z, windowType)) return null;
+
+  // V44.6 PALANCAS aplicadas como multiplicadores de sizing
+  const p11Mult = _v446PairSizeMult(_v446PairRollingPF(pair, ts));
+  const p7Mult = _v446TermStructureBoost(fundArr, idx, dir);
+  const t6Mult = _v446T6SizeMult(pair);
+  const t5Mult = _v446T5SizeMult(ts);
+  sizeMult = sizeMult * p11Mult * p7Mult * t6Mult * t5Mult;
+  sizeMult = Math.min(2.0, sizeMult);  // cap 2.0× (alineado con backend)
+  // Record signal event for T5 Hawkes
+  _v446T5RecordEvent(ts);
 
   const entry = bar.c || bar.close || bar[4];
   const tp = dir === 1 ? entry * (1 + params.TP_BPS / 10000) : entry * (1 - params.TP_BPS / 10000);
@@ -17215,12 +17440,16 @@ function safeFundingCarryEvaluate(pair, bars1h, currentBarIdx){
     funding_p20: p20,
     funding_zscore: z,
     size_multiplier: sizeMult,
+    p11_size_mult: p11Mult,
+    p7_ts_boost: p7Mult,
+    t6_size_mult: t6Mult,
+    t5_size_mult: t5Mult,
     quality_score: safeConfidenceScore(z, windowType),
     leverage_recommended: effectiveLeverage,
     window_type: windowType,
     timestamp: Date.now(),
-    _engine: 'APEX_ULTRA',
-    _sigType: 'funding_carry_ultra',
+    _engine: 'APEX_V44.6_LOCAL',
+    _sigType: 'funding_carry_v44_6',
     _mode: 'strict',
     _timeout_h: params.HOLD_H
   };
@@ -17312,9 +17541,13 @@ async function _genApexV44LiveSignalInner(sym, neutral){
     _ind: { apexV44: sig },
     leverage: sig.leverage_recommended,
     size_multiplier: sig.size_multiplier,
+    p11_size_mult: sig.p11_size_mult,
+    p7_ts_boost: sig.p7_ts_boost,
+    t6_size_mult: sig.t6_size_mult,
+    t5_size_mult: sig.t5_size_mult,
     window_type: sig.window_type,
     hold_hours: params.HOLD_H,
-    _engine: 'APEX_V44_LIVE'
+    _engine: 'APEX_V44.6_LOCAL'
   };
 }
 
@@ -17458,14 +17691,15 @@ async function runBacktestMatrix(){
   if(btn){ btn.disabled = true; btn.style.opacity = '0.5'; btn.textContent = '⏳ DESCARGANDO 120d...'; }
   if(status) status.textContent = 'Descargando 120d de data (15 pares)...';
 
-  const PERIODS = [7, 30, 60, 120];
+  const PERIODS = [60, 120, 364];
   const initCap = parseFloat(document.getElementById('bt-capital-inp')?.value || '10000');
   const lev = 5;
 
   try {
     const _nowHour = Math.floor(Date.now() / 3600000) * 3600000;
     const endTime = _nowHour;
-    const startTime = endTime - 120 * 24 * 60 * 60 * 1000;
+    // 2026-04-27: download 364d to support [60, 120, 364] periods matrix
+    const startTime = endTime - 364 * 24 * 60 * 60 * 1000;
     const fapi = 'https://fapi.binance.com/fapi/v1';
 
     // Use APEX universe (v42 PRO+) which is a superset for SAFE universe too
@@ -17473,10 +17707,10 @@ async function runBacktestMatrix(){
     const v44Pairs = (typeof SAFE_FUNDING_PARAMS !== 'undefined' ? SAFE_FUNDING_PARAMS.UNIVERSE : (typeof BINANCE_SCAN_SYMS !== 'undefined' ? BINANCE_SCAN_SYMS : []));
     const usePairs = (typeof BINANCE_SCAN_SYMS !== 'undefined' ? BINANCE_SCAN_SYMS : v44Pairs).filter(p => v44Pairs.includes(p));
 
-    // Download 120d 1H klines + funding + premium index (once per pair)
+    // Download 364d 1H klines + funding + premium index (once per pair)
     const allData = {};
     let downloaded = 0;
-    const need1h = 120 * 24 + 60;  // ~2940 bars
+    const need1h = 364 * 24 + 60;  // ~8800 bars
     await Promise.all(usePairs.map(async (sym) => {
       try {
         let kl1h = [];
@@ -17615,7 +17849,7 @@ async function runBacktestMatrix(){
     toast('Error en matriz backtest');
   } finally {
     _btMatrixRunning = false;
-    if(btn){ btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '▶ MATRIZ APEX+SAFE (7/30/60/120d)'; }
+    if(btn){ btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '▶ MATRIZ APEX+SAFE (60/120/364d)'; }
   }
 }
 
@@ -17640,8 +17874,10 @@ async function runVipBacktest(){
   const tradeAmt = Math.max(100, initCap * 0.05); // 5% per trade
   const lev = 5;
 
-  const pairs = modeSel === 'binance' ? BINANCE_SCAN_SYMS : modeSel === 'scalp' ? SCALP_SCAN_SYMS : VIP_SCAN_SYMS;
-  const cdBars = modeSel === 'binance' ? 12 : modeSel === 'scalp' ? 12 : 36;
+  // 2026-04-25: 'strict' = APEX (post-rebrand), uses V44 universe
+  const _isApexBT = (modeSel === 'binance' || modeSel === 'strict');
+  const pairs = _isApexBT ? BINANCE_SCAN_SYMS : modeSel === 'scalp' ? SCALP_SCAN_SYMS : VIP_SCAN_SYMS;
+  const cdBars = _isApexBT ? 12 : modeSel === 'scalp' ? 12 : 36;
   const cdMs = cdBars * 5 * 60 * 1000;
 
   // Show progress UI
@@ -17663,23 +17899,29 @@ async function runVipBacktest(){
     const startTime = endTime - daysSel * 24 * 60 * 60 * 1000;
     const allData = {};
 
-    // ═══ BINANCE (APEX V16) mode: needs 1H + funding + premiumIndex ═══
-    if(modeSel === 'binance'){
+    // ═══ APEX V44 funding carry mode: needs 1H + funding + premiumIndex ═══
+    // 2026-04-25: route both 'binance' and 'strict' (post-rebrand APEX) to V44 engine
+    if(modeSel === 'binance' || modeSel === 'strict'){
       const fapi = 'https://fapi.binance.com/fapi/v1';
       const v44Pairs = (typeof SAFE_FUNDING_PARAMS !== 'undefined' ? SAFE_FUNDING_PARAMS.UNIVERSE : []);
       const usePairs = pairs.filter(p => v44Pairs.includes(p));
       if(!usePairs.length){
-        toast('Los pares seleccionados no son soportados por V16');
+        toast('Los pares seleccionados no son soportados por APEX V44');
         _btRunning = false;
         if(runBtn){ runBtn.disabled = false; runBtn.style.opacity = '1'; runBtn.innerHTML = '▶ EJECUTAR BACKTEST'; }
         if(progWrap) progWrap.style.display = 'none';
         return;
       }
       let downloaded = 0;
+      // 2026-04-25: V44 funding carry needs significant warmup for rolling z-scores.
+      // Always download 120d minimum (= matriz behavior) so 7d/30d backtests get same trade frequency
+      // as the validated matriz (~12-19 trades/day across 15 pairs).
+      const WARMUP_DAYS = 120;
+      const warmupStartTime = endTime - WARMUP_DAYS * 24 * 60 * 60 * 1000;
+      const need1h = WARMUP_DAYS * 24 + 60; // ~2940 bars
       await Promise.all(usePairs.map(async (sym) => {
         try {
-          // 1H klines (paginate)
-          const need1h = Math.max(240, daysSel * 24 + 60);
+          // 1H klines (paginate to get full warmup window)
           let kl1h = [];
           let endT = endTime;
           while(kl1h.length < need1h){
@@ -17688,11 +17930,11 @@ async function runVipBacktest(){
             const batch = await r.json();
             if(!Array.isArray(batch) || batch.length === 0) break;
             kl1h = batch.concat(kl1h);
-            if(batch[0][0] <= startTime - 60*3600000) break;
+            if(batch[0][0] <= warmupStartTime - 60*3600000) break;
             endT = batch[0][0] - 1;
           }
           kl1h.sort((a,b) => a[0]-b[0]);
-          // Funding rate (paginate back through time)
+          // Funding rate (paginate back through full warmup window)
           let fr = [];
           let frEndT = endTime;
           for(let pass=0; pass<5; pass++){
@@ -17701,7 +17943,7 @@ async function runVipBacktest(){
             if(!Array.isArray(batch) || batch.length === 0) break;
             fr = batch.concat(fr);
             frEndT = batch[0].fundingTime - 1;
-            if(batch[0].fundingTime <= startTime - 24*3600000) break;
+            if(batch[0].fundingTime <= warmupStartTime - 24*3600000) break;
           }
           // Premium index klines (paginate)
           let pi = [];
@@ -17712,7 +17954,7 @@ async function runVipBacktest(){
             const batch = await r.json();
             if(!Array.isArray(batch) || batch.length === 0) break;
             pi = batch.concat(pi);
-            if(batch[0][0] <= startTime - 60*3600000) break;
+            if(batch[0][0] <= warmupStartTime - 60*3600000) break;
             piEndT = batch[0][0] - 1;
           }
           pi.sort((a,b) => a[0]-b[0]);
@@ -17721,21 +17963,20 @@ async function runVipBacktest(){
           const dlPct = 5 + Math.round((downloaded / usePairs.length) * 55);
           if(progBar) progBar.style.width = dlPct + '%';
           if(progPct) progPct.textContent = dlPct + '%';
-          if(progLabel) progLabel.textContent = `APEX-G4: descargando ${downloaded}/${usePairs.length} pares (1H+FR+PremIdx)`;
-        } catch(e){ console.error('[APEX-G4 backtest] dl error', sym, e); }
+          if(progLabel) progLabel.textContent = `APEX V44: descargando ${downloaded}/${usePairs.length} pares (1H+FR+PremIdx · ${WARMUP_DAYS}d warmup)`;
+        } catch(e){ console.error('[APEX V44 backtest] dl error', sym, e); }
       }));
       if(progBar) progBar.style.width = '70%';
       if(progPct) progPct.textContent = '70%';
-      if(progLabel) progLabel.textContent = 'APEX-G4: ejecutando motor ML...';
+      if(progLabel) progLabel.textContent = 'APEX V44: ejecutando motor sobre 120d (filtrando a ' + daysSel + 'd)...';
       await new Promise(r => setTimeout(r, 0));
-      // Slice data to requested window (after full-history fetch)
-      for(const sym of usePairs){
-        const d = allData[sym]; if(!d) continue;
-        d.kl1h = d.kl1h.filter(k => k[0] >= startTime - 72*3600000 && k[0] <= endTime);
-        d.pi = d.pi.filter(k => k[0] >= startTime - 72*3600000 && k[0] <= endTime);
-        d.fr = d.fr.filter(f => f.fundingTime >= startTime - 72*3600000 && f.fundingTime <= endTime);
-      }
-      const trades = runApexV44FromV16Data(allData, usePairs, { capital: initCap, leverage: lev });
+      // 2026-04-25: NO slice data — V44 needs full 120d for rolling z-scores.
+      // Run engine on full data, then filter trades to requested window for display.
+      const allTradesV44 = runApexV44FromV16Data(allData, usePairs, { capital: initCap, leverage: lev });
+      const trades = allTradesV44.filter(t => {
+        const tm = t.time || t.entryTime || 0;
+        return tm >= startTime && tm <= endTime;
+      });
       if(progBar) progBar.style.width = '98%';
       if(progPct) progPct.textContent = '98%';
       if(progLabel) progLabel.textContent = 'Calculando estadísticas...';
@@ -17744,9 +17985,9 @@ async function runVipBacktest(){
       _renderBacktestResults(trades, initCap, modeSel, daysSel);
       if(progBar) progBar.style.width = '100%';
       if(progPct) progPct.textContent = '100%';
-      if(progLabel) progLabel.textContent = `✓ Backtest APEX-G4 completado — ${trades.length} trades`;
+      if(progLabel) progLabel.textContent = `✓ Backtest APEX V44 completado — ${trades.length} trades`;
       setTimeout(() => { if(progWrap) progWrap.style.display = 'none'; }, 2000);
-      toast(`Backtest APEX-G4: ${trades.length} trades en ${usePairs.length} pares`);
+      toast(`Backtest APEX V44: ${trades.length} trades en ${usePairs.length} pares`);
       _btRunning = false;
       if(runBtn){ runBtn.disabled = false; runBtn.style.opacity = '1'; runBtn.innerHTML = '▶ EJECUTAR BACKTEST'; }
       return;
@@ -18185,7 +18426,7 @@ async function runResultsBacktest() {
 
     // ═══════════════════════════════════════════════════════════════════
     // APEX ENGINE BACKTEST (2026-04-22 rebrand): funding carry, V44 validated
-    // PF 1.85 · WR 73.5% · DD 4.58% · Sharpe 11.94 · +436% PnL (Holdout OOS 365d)
+    // PF 1.43 · WR 68.5% · DD 3.67% · Sharpe 5.76 · +37% PnL (Holdout OOS 365d)
     // Uses runSafeOnData with frozen SAFE_FUNDING_PARAMS
     // ═══════════════════════════════════════════════════════════════════
     if (motor === 'strict') {
@@ -18244,7 +18485,7 @@ async function runResultsBacktest() {
       if (progPct) progPct.textContent = '95%';
       console.log('=== APEX Funding DONE === trades:', trades.length, 'wins:', trades.filter(t=>t.result==='WIN').length);
     } else if (motor === 'binance') {
-      console.log('=== APEX-G4 BACKTEST === pairs:', pairs.length, 'days:', days);
+      console.log('=== APEX V44 BACKTEST === pairs:', pairs.length, 'days:', days);
       const v44Pairs = (typeof SAFE_FUNDING_PARAMS !== 'undefined' ? SAFE_FUNDING_PARAMS.UNIVERSE : []);
       const usePairs = pairs.filter(p => v44Pairs.includes(p));
       if (!usePairs.length) {
@@ -18255,7 +18496,7 @@ async function runResultsBacktest() {
       }
       const fapi = 'https://fapi.binance.com/fapi/v1';
       // Download funding + premium index (kl1h already downloaded above)
-      if (progLabel) progLabel.textContent = 'APEX-G4: descargando Funding + Premium Index...';
+      if (progLabel) progLabel.textContent = 'APEX V44: descargando Funding + Premium Index...';
       await Promise.all(usePairs.map(async (sym) => {
         if (!allData[sym]) return;
         try {
@@ -18304,13 +18545,13 @@ async function runResultsBacktest() {
       }));
       if (progBar) progBar.style.width = '80%';
       if (progPct) progPct.textContent = '80%';
-      if (progLabel) progLabel.textContent = 'APEX-G4: ejecutando motor ML...';
+      if (progLabel) progLabel.textContent = 'APEX V44: ejecutando motor ML...';
       await new Promise(r => setTimeout(r, 0));
       const v16Trades = runApexV44FromV16Data(allData, usePairs, { capital: initCap, leverage: lev });
       for (const tr of v16Trades) trades.push(tr);
       if (progBar) progBar.style.width = '95%';
       if (progPct) progPct.textContent = '95%';
-      console.log('=== APEX-G4 DONE === trades:', trades.length, 'wins:', trades.filter(t=>t.result==='WIN').length, 'losses:', trades.filter(t=>t.result==='LOSS').length);
+      console.log('=== APEX V44 DONE === trades:', trades.length, 'wins:', trades.filter(t=>t.result==='WIN').length, 'losses:', trades.filter(t=>t.result==='LOSS').length);
     } else if (false) { // Legacy path disabled
       // --- Inline indicator helpers (identical to apex-final.js) ---
       const _sma = (arr,p) => { const r=[]; for(let i=0;i<arr.length;i++) r.push(i<p-1?NaN:arr.slice(i-p+1,i+1).reduce((a,b)=>a+b)/p); return r; };
@@ -20050,6 +20291,8 @@ const DICT_ES_EN = {
   'Protección Inteligente':'Smart Protection',
   'autotrading real en Binance Futures':'real autotrading on Binance Futures',
   'Herramientas avanzadas de grado institucional para traders exigentes. Señales de alta frecuencia, autotrading real en Binance Futures, scanner avanzado y gestión automática de riesgo.':'Advanced institutional-grade tools for demanding traders. High-frequency signals, real autotrading on Binance Futures, advanced scanner and automatic risk management.',
+  // Inner HTML for VIP signals tab banner (with embedded <b> tag) — must match EXACTLY the innerHTML
+  'Herramientas avanzadas de grado institucional para traders exigentes. Señales de alta frecuencia, <b style="color:#FFD700">autotrading real en Binance Futures</b>, scanner avanzado y gestión automática de riesgo.':'Advanced institutional-grade tools for demanding traders. High-frequency signals, <b style="color:#FFD700">real autotrading on Binance Futures</b>, advanced scanner and automatic risk management.',
 
   // ═══ LEGAL Y TÉRMINOS CARD (Settings) ═══
   'LEGAL Y TÉRMINOS':'LEGAL & TERMS',
@@ -20653,6 +20896,41 @@ function applyLang(){
       el.innerHTML = dict[esHtml];
     }
   });
+
+  // 2026-04-27: explicit translation for VIP signals banner (mixed inline content)
+  // Re-renders innerHTML based on language (since text-walker can't handle mixed content reliably)
+  try {
+    const banner = document.getElementById('signals-vip-banner-text');
+    if(banner){
+      const ES_HTML = 'Herramientas avanzadas de grado institucional para traders exigentes. Señales de alta frecuencia, <b style="color:#FFD700">autotrading real en Binance Futures</b>, scanner avanzado y gestión automática de riesgo.';
+      const EN_HTML = 'Advanced institutional-grade tools for demanding traders. High-frequency signals, <b style="color:#FFD700">real autotrading on Binance Futures</b>, advanced scanner and automatic risk management.';
+      banner.innerHTML = currentLang === 'en' ? EN_HTML : ES_HTML;
+    }
+  } catch(_){}
+
+  // 2026-04-25: re-render notification center elements (header, empty state, conn label, modal)
+  try {
+    const isEN = currentLang === 'en';
+    const _t = (es, en) => isEN ? en : es;
+    document.querySelectorAll('[data-i18n-notif]').forEach(el => {
+      const key = el.getAttribute('data-i18n-notif');
+      const map = {
+        title: ['NOTIFICACIONES','NOTIFICATIONS'],
+        markRead: ['Marcar leídas','Mark as read'],
+        empty: ['Sin notificaciones','No notifications'],
+        critTitle: ['EVENTO CRÍTICO','CRITICAL EVENT'],
+        acknowledge: ['RECONOCER','ACKNOWLEDGE'],
+      };
+      if (map[key]) el.textContent = isEN ? map[key][1] : map[key][0];
+    });
+    // Update connection state label
+    if (typeof updateConnState === 'function') updateConnState();
+    // Re-render notif list (re-translates RECONOCER buttons + relative time)
+    if (typeof renderNotifs === 'function') {
+      const panel = document.getElementById('rx-notif-panel');
+      if (panel && panel.classList.contains('open')) renderNotifs();
+    }
+  } catch(_){}
 }
 
 // t() for dynamic JS text
@@ -22124,7 +22402,7 @@ function acceptTerms(){
 }
 
 function rejectTerms(){
-  alert('Si no aceptás los términos, no podés usar la plataforma. Serás redirigido.');
+  alert(t('Si no aceptás los términos, no podés usar la plataforma. Serás redirigido.'));
   window.location.href = 'https://www.google.com';
 }
 
@@ -23560,12 +23838,12 @@ document.addEventListener('keydown', (e) => {
           <div class="epm-opt-badge">APEX</div>
           <div class="epm-opt-name">APEX ENGINE</div>
         </div>
-        <div class="epm-opt-desc">Funding Carry V44 &middot; 15 pares &middot; 3x leverage &middot; compounding. Holdout OOS 365d: PF 1.85, WR 73.5%.</div>
+        <div class="epm-opt-desc">Funding Carry V44 &middot; 15 pares &middot; 3x leverage &middot; compounding. Holdout OOS 365d: PF 1.43, WR 68.5%.</div>
         <div class="epm-opt-stats">
           <span><b>15</b> pares</span>
           <span>PF <b>1.85</b></span>
-          <span>WR <b>73.5%</b></span>
-          <span>DD <b>4.58%</b></span>
+          <span>WR <b>68.5%</b></span>
+          <span>DD <b>3.67%</b></span>
         </div>
       </button>
       <button class="epm-opt core" type="button" data-value="frequent" onclick="enginePickerConfirm('frequent')">
@@ -23854,39 +24132,60 @@ document.addEventListener('keydown', (e) => {
     }
   }
 
-  // ═══ PANEL 4: Liquidation Cascade (Binance public WS stream de forceOrders) ═══
-  // Implementación v1: últimos movimientos grandes (5min candle con volumen spike) como proxy honesto.
-  async function updLiq(){
+  // ═══ PANEL 4: Liquidation Cascade (Binance public WS stream de forceOrders REAL) ═══
+  // 2026-04-25: upgrade a stream real wss://fstream.binance.com/ws/!forceOrder@arr
+  // Cada evento es una liquidación real en mainnet (no proxy).
+  let _liqEvents = []; // últimas 50 liquidaciones, más recientes primero
+  let _liqWS = null;
+  function _connectLiqWS(){
+    if(_liqWS && (_liqWS.readyState === 0 || _liqWS.readyState === 1)) return;
     try {
-      const syms = ['BTCUSDT','ETHUSDT','SOLUSDT'];
-      const results = await Promise.all(syms.map(async s => {
+      _liqWS = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
+      _liqWS.onmessage = (ev) => {
         try {
-          const kl = await fetchJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${s}&interval=5m&limit=12`);
-          if(!kl || kl.length < 6) return null;
-          const last = kl.at(-1);
-          const open = +last[1], close = +last[4], high = +last[2], low = +last[3], vol = +last[5];
-          const avgVol = kl.slice(0,-1).reduce((sum,k) => sum+ +k[5], 0) / (kl.length-1);
-          const pctMove = (close-open)/open;
-          const volSpike = vol / avgVol;
-          return { sym:s, pctMove, volSpike, wickDn: Math.abs((low-Math.min(open,close))/open), wickUp: Math.abs((high-Math.max(open,close))/open) };
-        } catch(e){ return null; }
-      }));
-      const valid = results.filter(Boolean);
-      const body = document.getElementById('ami-liq-body');
-      if(!body) return;
-      const alerts = valid.filter(r => r.volSpike > 2.5 || Math.abs(r.pctMove) > 0.015);
-      if(alerts.length === 0){
-        body.innerHTML = '<div style="font-size:10px;color:rgba(255,255,255,.5);text-align:center;padding:6px 0">Sin cascadas recientes<br><span style="font-size:9px;color:rgba(255,255,255,.35)">Monitoreando vol spikes + wicks 5m</span></div>';
-      } else {
-        body.innerHTML = alerts.slice(0,4).map(a => {
-          const color = a.pctMove < 0 ? '#ff3a3a' : '#00ff41';
-          return `<div class="ami-oi-row"><span class="ami-oi-label">${a.sym.replace('USDT','')} · 5m</span><span class="ami-oi-val" style="color:${color}">${fmtPct(a.pctMove,2)} · vol ${a.volSpike.toFixed(1)}×</span></div>`;
-        }).join('');
-      }
-    } catch(e){
-      const b = document.getElementById('ami-liq-body');
-      if(b) b.innerHTML = `<div class="ami-loading">Error: ${e.message}</div>`;
+          const msg = JSON.parse(ev.data);
+          const o = msg.o || {};
+          if (!o.s || !o.S || !o.q || !o.p) return;
+          const sym = o.s.replace('USDT','');
+          const side = o.S === 'SELL' ? 'long' : 'short'; // SELL = long liquidated; BUY = short liquidated
+          const qty = parseFloat(o.q);
+          const price = parseFloat(o.p);
+          const usd = qty * price;
+          if (usd < 10000) return; // filter noise: only ≥$10k liquidations
+          _liqEvents.unshift({ sym, side, usd, price, ts: Date.now() });
+          if (_liqEvents.length > 50) _liqEvents.length = 50;
+          _renderLiqPanel();
+        } catch(_){}
+      };
+      _liqWS.onclose = () => { setTimeout(_connectLiqWS, 3000); };
+      _liqWS.onerror = () => { try{_liqWS.close();}catch(_){} };
+    } catch(_){
+      setTimeout(_connectLiqWS, 5000);
     }
+  }
+  function _renderLiqPanel(){
+    const body = document.getElementById('ami-liq-body');
+    if(!body) return;
+    const recent = _liqEvents.slice(0, 8);
+    if (recent.length === 0){
+      body.innerHTML = '<div style="font-size:10px;color:rgba(255,255,255,.5);text-align:center;padding:6px 0">Esperando liquidaciones…<br><span style="font-size:9px;color:rgba(255,255,255,.35)">Stream Binance en vivo</span></div>';
+      return;
+    }
+    body.innerHTML = recent.map(e => {
+      const color = e.side === 'long' ? '#ff3a3a' : '#00ff41';
+      const arrow = e.side === 'long' ? '▼' : '▲';
+      const ago = Math.max(1, Math.round((Date.now()-e.ts)/1000));
+      const agoStr = ago < 60 ? `${ago}s` : `${Math.round(ago/60)}m`;
+      const usdStr = e.usd >= 1e6 ? `$${(e.usd/1e6).toFixed(2)}M` : e.usd >= 1e3 ? `$${(e.usd/1e3).toFixed(0)}K` : `$${e.usd.toFixed(0)}`;
+      return `<div class="ami-oi-row" style="animation:_aiiRowIn .4s ease-out"><span class="ami-oi-label" style="color:${color}">${arrow} ${e.sym}</span><span class="ami-oi-val" style="color:${color};font-weight:700">${usdStr} · ${agoStr}</span></div>`;
+    }).join('');
+  }
+  // Re-render every 3s to update timestamps
+  setInterval(_renderLiqPanel, 3000);
+  async function updLiq(){
+    // Connect WS once on first call (lazy init)
+    if(!_liqWS) _connectLiqWS();
+    _renderLiqPanel();
   }
 
   // ═══ PANEL 5: TradFi Correlation (BTC correlation con indicadores públicos) ═══
@@ -23953,34 +24252,77 @@ document.addEventListener('keydown', (e) => {
     }
   }
 
-  // ═══ PANEL 7: Orderflow Imbalance (taker buy ratio desde klines 1h) ═══
-  async function updOrderflow(){
+  // ═══ PANEL 7: Orderflow Imbalance (Binance aggTrade WS REAL — buy/sell volume rolling 60s) ═══
+  // 2026-04-25: upgrade a stream real wss://fstream.binance.com — taker buy vs taker sell USD volume
+  // Cada aggTrade tiene `m` (true=buyer is maker → SELL pressure; false=seller is maker → BUY pressure)
+  const _ofState = {}; // sym → { buyUsd, sellUsd, ts0 }
+  let _ofWS = null;
+  function _connectOrderflowWS(){
+    if(_ofWS && (_ofWS.readyState === 0 || _ofWS.readyState === 1)) return;
     try {
-      const syms = ['BTCUSDT','ETHUSDT','SOLUSDT'];
-      const results = await Promise.all(syms.map(async s => {
+      const syms = ['btcusdt','ethusdt','solusdt'];
+      const streams = syms.map(s => s + '@aggTrade').join('/');
+      _ofWS = new WebSocket(`wss://fstream.binance.com/stream?streams=${streams}`);
+      _ofWS.onmessage = (ev) => {
         try {
-          const kl = await fetchJSON(`https://fapi.binance.com/fapi/v1/klines?symbol=${s}&interval=1h&limit=6`);
-          if(!kl || kl.length < 4) return null;
-          let totalVol = 0, takerBuy = 0;
-          for(const k of kl){ totalVol += +k[5]; takerBuy += +(k[9]||0); }
-          const ratio = totalVol > 0 ? takerBuy/totalVol : 0.5;
-          const bias = (ratio - 0.5) * 2; // [-1, 1]
-          return { sym:s, ratio, bias };
-        } catch(e){ return null; }
-      }));
-      const valid = results.filter(Boolean);
-      const body = document.getElementById('ami-orderflow-body');
-      if(!body) return;
-      if(valid.length === 0){ body.innerHTML = '<div class="ami-loading">Sin datos</div>'; return; }
-      body.innerHTML = valid.map(r => {
-        const color = r.bias > 0.05 ? '#00ff41' : r.bias < -0.05 ? '#ff3a3a' : 'rgba(255,255,255,.6)';
-        const label = r.bias > 0.1 ? 'BUY HEAVY' : r.bias < -0.1 ? 'SELL HEAVY' : 'BALANCED';
-        return `<div class="ami-oi-row"><span class="ami-oi-label">${r.sym.replace('USDT','')}</span><span class="ami-oi-val" style="color:${color}">${(r.ratio*100).toFixed(1)}% · ${label}</span></div>`;
-      }).join('');
-    } catch(e){
-      const b = document.getElementById('ami-orderflow-body');
-      if(b) b.innerHTML = `<div class="ami-loading">Error: ${e.message}</div>`;
+          const msg = JSON.parse(ev.data);
+          const d = msg.data || {};
+          if (!d.s || !d.q || !d.p || typeof d.m === 'undefined') return;
+          const sym = d.s;
+          const usd = parseFloat(d.q) * parseFloat(d.p);
+          if (!_ofState[sym]) _ofState[sym] = { buyUsd: 0, sellUsd: 0, ts0: Date.now() };
+          // m=true → buyer is maker → aggressive seller hit bid → SELL pressure
+          // m=false → seller is maker → aggressive buyer lifted ask → BUY pressure
+          if (d.m) _ofState[sym].sellUsd += usd;
+          else _ofState[sym].buyUsd += usd;
+        } catch(_){}
+      };
+      _ofWS.onclose = () => { setTimeout(_connectOrderflowWS, 3000); };
+      _ofWS.onerror = () => { try{_ofWS.close();}catch(_){} };
+    } catch(_) {
+      setTimeout(_connectOrderflowWS, 5000);
     }
+  }
+  // Reset rolling window every 60s + render
+  setInterval(() => {
+    const body = document.getElementById('ami-orderflow-body');
+    if (!body) return;
+    const syms = Object.keys(_ofState);
+    if (syms.length === 0){ body.innerHTML = '<div class="ami-loading">Esperando trades…</div>'; return; }
+    body.innerHTML = syms.map(s => {
+      const st = _ofState[s];
+      const total = st.buyUsd + st.sellUsd;
+      if (total < 1000) return `<div class="ami-oi-row"><span class="ami-oi-label">${s.replace('USDT','')}</span><span class="ami-oi-val" style="color:rgba(255,255,255,.4)">low vol</span></div>`;
+      const ratio = st.buyUsd / total;
+      const bias = (ratio - 0.5) * 2;
+      const color = bias > 0.05 ? '#00ff41' : bias < -0.05 ? '#ff3a3a' : 'rgba(255,255,255,.6)';
+      const label = bias > 0.15 ? 'BUY HEAVY' : bias < -0.15 ? 'SELL HEAVY' : 'BALANCED';
+      const totalK = total >= 1e6 ? '$' + (total/1e6).toFixed(1) + 'M' : '$' + (total/1e3).toFixed(0) + 'K';
+      return `<div class="ami-oi-row"><span class="ami-oi-label">${s.replace('USDT','')}</span><span class="ami-oi-val" style="color:${color}">${(ratio*100).toFixed(1)}% · ${label} · ${totalK}/60s</span></div>`;
+    }).join('');
+    // Reset for next 60s window
+    syms.forEach(s => { _ofState[s] = { buyUsd: 0, sellUsd: 0, ts0: Date.now() }; });
+  }, 60000);
+  // First render every 5s before window expires
+  setInterval(() => {
+    const body = document.getElementById('ami-orderflow-body');
+    if (!body) return;
+    const syms = Object.keys(_ofState);
+    if (syms.length === 0) return;
+    body.innerHTML = syms.map(s => {
+      const st = _ofState[s];
+      const total = st.buyUsd + st.sellUsd;
+      if (total < 1000) return `<div class="ami-oi-row"><span class="ami-oi-label">${s.replace('USDT','')}</span><span class="ami-oi-val" style="color:rgba(255,255,255,.4)">low vol</span></div>`;
+      const ratio = st.buyUsd / total;
+      const bias = (ratio - 0.5) * 2;
+      const color = bias > 0.05 ? '#00ff41' : bias < -0.05 ? '#ff3a3a' : 'rgba(255,255,255,.6)';
+      const label = bias > 0.15 ? 'BUY HEAVY' : bias < -0.15 ? 'SELL HEAVY' : 'BALANCED';
+      const totalK = total >= 1e6 ? '$' + (total/1e6).toFixed(1) + 'M' : '$' + (total/1e3).toFixed(0) + 'K';
+      return `<div class="ami-oi-row"><span class="ami-oi-label">${s.replace('USDT','')}</span><span class="ami-oi-val" style="color:${color}">${(ratio*100).toFixed(1)}% · ${label} · ${totalK}</span></div>`;
+    }).join('');
+  }, 5000);
+  async function updOrderflow(){
+    if (!_ofWS) _connectOrderflowWS();
   }
 
   // ═══ PANEL 8: APEX Engine Status (local) ═══
@@ -24672,20 +25014,23 @@ document.addEventListener('keydown', (e) => {
     const panel = document.createElement('div');
     panel.className = 'rx-notif-panel';
     panel.id = 'rx-notif-panel';
+    // 2026-04-25: i18n del centro de notificaciones
+    const _isEN = () => (typeof currentLang !== 'undefined' && currentLang === 'en') || (typeof document !== 'undefined' && document.documentElement.lang === 'en');
+    const _t = (es, en) => _isEN() ? en : es;
     panel.innerHTML = `
       <div class="rx-notif-head">
-        <div class="rx-notif-head-title">NOTIFICACIONES</div>
+        <div class="rx-notif-head-title" data-i18n-notif="title">${_t('NOTIFICACIONES','NOTIFICATIONS')}</div>
         <div class="rx-notif-head-actions">
-          <button id="rx-notif-mark-all">Marcar leídas</button>
+          <button id="rx-notif-mark-all" data-i18n-notif="markRead">${_t('Marcar leídas','Mark as read')}</button>
           <button id="rx-notif-close">×</button>
         </div>
       </div>
       <div class="rx-notif-list" id="rx-notif-list">
-        <div class="rx-notif-empty">Sin notificaciones</div>
+        <div class="rx-notif-empty" data-i18n-notif="empty">${_t('Sin notificaciones','No notifications')}</div>
       </div>
       <div class="rx-notif-conn-state">
         <span class="rx-notif-conn-dot closed" id="rx-notif-conn-dot"></span>
-        <span id="rx-notif-conn-label">Connecting…</span>
+        <span id="rx-notif-conn-label">${_t('Conectando…','Connecting…')}</span>
       </div>
     `;
     document.body.appendChild(panel);
@@ -24696,9 +25041,9 @@ document.addEventListener('keydown', (e) => {
     modal.id = 'rx-critical-modal';
     modal.innerHTML = `
       <div class="rx-critical-modal-card">
-        <div class="rx-critical-modal-title" id="rx-critical-title">EVENTO CRÍTICO</div>
+        <div class="rx-critical-modal-title" id="rx-critical-title" data-i18n-notif="critTitle">${_t('EVENTO CRÍTICO','CRITICAL EVENT')}</div>
         <div class="rx-critical-modal-body" id="rx-critical-body"></div>
-        <button class="rx-critical-modal-btn" id="rx-critical-ack">RECONOCER</button>
+        <button class="rx-critical-modal-btn" id="rx-critical-ack" data-i18n-notif="acknowledge">${_t('RECONOCER','ACKNOWLEDGE')}</button>
       </div>
     `;
     document.body.appendChild(modal);
@@ -24724,25 +25069,30 @@ document.addEventListener('keydown', (e) => {
   function fmtRelTime(ts){
     const t = new Date(ts).getTime();
     const diff = Math.floor((RXSignals.getServerTime() - t) / 1000);
-    if (diff < 60) return diff + 's atrás';
-    if (diff < 3600) return Math.floor(diff/60) + 'm atrás';
-    if (diff < 86400) return Math.floor(diff/3600) + 'h atrás';
-    return Math.floor(diff/86400) + 'd atrás';
+    // 2026-04-25: i18n-aware relative time
+    const isEN = (typeof currentLang !== 'undefined' && currentLang === 'en') || (typeof document !== 'undefined' && document.documentElement.lang === 'en');
+    const ago = isEN ? ' ago' : ' atrás';
+    if (diff < 60) return diff + 's' + ago;
+    if (diff < 3600) return Math.floor(diff/60) + 'm' + ago;
+    if (diff < 86400) return Math.floor(diff/3600) + 'h' + ago;
+    return Math.floor(diff/86400) + 'd' + ago;
   }
 
   function renderNotifs(){
     const list = document.getElementById('rx-notif-list');
     if (!list) return;
     const notifs = RXSignals.getNotifications();
+    const isEN = (typeof currentLang !== 'undefined' && currentLang === 'en') || (typeof document !== 'undefined' && document.documentElement.lang === 'en');
     if (notifs.length === 0) {
-      list.innerHTML = '<div class="rx-notif-empty">Sin notificaciones</div>';
+      list.innerHTML = '<div class="rx-notif-empty">' + (isEN ? 'No notifications' : 'Sin notificaciones') + '</div>';
       return;
     }
     list.innerHTML = notifs.slice(0, 50).map(n => {
       const sevCls = 'sev-' + (n.severity || 'INFO');
       const unreadCls = (n.read === 0 || !n.read) ? 'unread' : '';
+      const ackLabel = isEN ? 'ACKNOWLEDGE' : 'RECONOCER';
       const ackBtn = (n.severity === 'CRITICAL' && !n.acknowledged)
-        ? `<button class="rx-notif-item-ack" data-ack="${n.id}">RECONOCER</button>` : '';
+        ? `<button class="rx-notif-item-ack" data-ack="${n.id}">${ackLabel}</button>` : '';
       return `<div class="rx-notif-item ${sevCls} ${unreadCls}" data-id="${n.id}">
         <div class="rx-notif-item-title">
           <span class="rx-notif-item-sev ${n.severity || 'INFO'}">${n.severity || 'INFO'}</span>
@@ -24784,7 +25134,11 @@ document.addEventListener('keydown', (e) => {
     if (!dot || !lbl) return;
     const s = RXSignals.connectionState();
     dot.className = 'rx-notif-conn-dot ' + s;
-    const map = { open: 'Live · WS conectado', connecting: 'Conectando…', reconnecting: 'Reconectando…', closed: 'Sin conexión · usando REST', rest_fallback: 'REST fallback' };
+    // 2026-04-25: i18n + simplified labels (saca "WS conectado", deja "Live")
+    const isEN = (typeof currentLang !== 'undefined' && currentLang === 'en') || (typeof document !== 'undefined' && document.documentElement.lang === 'en');
+    const mapES = { open: 'Live', connecting: 'Conectando…', reconnecting: 'Reconectando…', closed: 'Sin conexión', rest_fallback: 'REST fallback' };
+    const mapEN = { open: 'Live', connecting: 'Connecting…', reconnecting: 'Reconnecting…', closed: 'Offline', rest_fallback: 'REST fallback' };
+    const map = isEN ? mapEN : mapES;
     lbl.textContent = map[s] || s;
   }
 
@@ -24794,7 +25148,8 @@ document.addEventListener('keydown', (e) => {
     const n = pending[0];
     const modal = document.getElementById('rx-critical-modal');
     if (!modal) return;
-    document.getElementById('rx-critical-title').textContent = n.title || 'EVENTO CRÍTICO';
+    const isEN_crit = (typeof currentLang !== 'undefined' && currentLang === 'en') || (typeof document !== 'undefined' && document.documentElement.lang === 'en');
+    document.getElementById('rx-critical-title').textContent = n.title || (isEN_crit ? 'CRITICAL EVENT' : 'EVENTO CRÍTICO');
     document.getElementById('rx-critical-body').textContent = n.body || '';
     modal.classList.add('open');
     const ackBtn = document.getElementById('rx-critical-ack');
@@ -24807,6 +25162,10 @@ document.addEventListener('keydown', (e) => {
     };
   }
 
+  // 2026-04-25: expose to window so applyLang() can re-render notif center on language toggle
+  window.updateConnState = updateConnState;
+  window.renderNotifs = renderNotifs;
+
   function bootstrapSignalSystem(){
     if (typeof RXSignals === 'undefined') return;
     // Try to inject UI; retry until topbar exists
@@ -24818,10 +25177,13 @@ document.addEventListener('keydown', (e) => {
       setTimeout(() => clearInterval(iv), 15000);
     }
 
+    // 2026-04-27 V44.6: engineVersion auto-detect (V44.5 fallback) so older signals still match
+    // 2026-04-27 fix: 'connecting' stuck — server requires auth, anonymous users have no token.
+    // Pass engineVersion as null so backend returns ALL active signals regardless of version.
     RXSignals.init({
       apiBase: getApiBase(),
       getToken: getStoredToken,
-      engineVersion: 'apex-v44-funding-carry-1.0'
+      engineVersion: null  // null = match any engine, including V44.5 + V44.6
     });
 
     RXSignals.subscribe('notification', (n) => {

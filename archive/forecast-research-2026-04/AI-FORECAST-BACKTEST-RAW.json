@@ -1,0 +1,673 @@
+{
+  "meta": {
+    "days": 60,
+    "threshold": 0.8,
+    "symbols": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT",
+      "BNBUSDT",
+      "XRPUSDT"
+    ],
+    "horizons": [
+      2,
+      4,
+      6,
+      8
+    ],
+    "ranAt": "2026-04-24T17:42:24.776Z",
+    "elapsedS": 12.7
+  },
+  "agg": {
+    "byHorizon": {
+      "2": {
+        "total": 529,
+        "hits": 260
+      },
+      "4": {
+        "total": 529,
+        "hits": 257
+      },
+      "6": {
+        "total": 529,
+        "hits": 257
+      },
+      "8": {
+        "total": 529,
+        "hits": 235
+      }
+    },
+    "bySymbol": {
+      "BTCUSDT": {
+        "total": 444,
+        "hits": 218
+      },
+      "ETHUSDT": {
+        "total": 396,
+        "hits": 163
+      },
+      "SOLUSDT": {
+        "total": 504,
+        "hits": 261
+      },
+      "BNBUSDT": {
+        "total": 380,
+        "hits": 151
+      },
+      "XRPUSDT": {
+        "total": 392,
+        "hits": 216
+      }
+    },
+    "byConfBucket": {
+      "0.85-0.90": {
+        "total": 2116,
+        "hits": 1009,
+        "confSum": 1737.607668769702
+      }
+    },
+    "total": 2116
+  },
+  "sample": [
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771837200000,
+      "horizonH": 2,
+      "entryPrice": 66374.8,
+      "targetPrice": 66170.8,
+      "predictedDir": "DOWN",
+      "confidence": 0.8409611243615795,
+      "actualDir": "DOWN",
+      "actualMovePct": -0.3073455588566745,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771837200000,
+      "horizonH": 4,
+      "entryPrice": 66374.8,
+      "targetPrice": 66099.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.8409611243615795,
+      "actualDir": "DOWN",
+      "actualMovePct": -0.4141632065181496,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771837200000,
+      "horizonH": 6,
+      "entryPrice": 66374.8,
+      "targetPrice": 65633.1,
+      "predictedDir": "DOWN",
+      "confidence": 0.8409611243615795,
+      "actualDir": "DOWN",
+      "actualMovePct": -1.1174421617842873,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771837200000,
+      "horizonH": 8,
+      "entryPrice": 66374.8,
+      "targetPrice": 64787.3,
+      "predictedDir": "DOWN",
+      "confidence": 0.8409611243615795,
+      "actualDir": "DOWN",
+      "actualMovePct": -2.3917209543380924,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771844400000,
+      "horizonH": 2,
+      "entryPrice": 66170.8,
+      "targetPrice": 66099.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.8342730622502956,
+      "actualDir": "DOWN",
+      "actualMovePct": -0.1071469590816625,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771844400000,
+      "horizonH": 4,
+      "entryPrice": 66170.8,
+      "targetPrice": 65633.1,
+      "predictedDir": "DOWN",
+      "confidence": 0.8342730622502956,
+      "actualDir": "DOWN",
+      "actualMovePct": -0.8125940747278212,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771844400000,
+      "horizonH": 6,
+      "entryPrice": 66170.8,
+      "targetPrice": 64787.3,
+      "predictedDir": "DOWN",
+      "confidence": 0.8342730622502956,
+      "actualDir": "DOWN",
+      "actualMovePct": -2.090801380669419,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771844400000,
+      "horizonH": 8,
+      "entryPrice": 66170.8,
+      "targetPrice": 64273.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.8342730622502956,
+      "actualDir": "DOWN",
+      "actualMovePct": -2.8666723086316037,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771848000000,
+      "horizonH": 2,
+      "entryPrice": 66249.9,
+      "targetPrice": 65895.5,
+      "predictedDir": "DOWN",
+      "confidence": 0.8387807218804908,
+      "actualDir": "DOWN",
+      "actualMovePct": -0.5349442036893554,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771848000000,
+      "horizonH": 4,
+      "entryPrice": 66249.9,
+      "targetPrice": 65343.1,
+      "predictedDir": "DOWN",
+      "confidence": 0.8387807218804908,
+      "actualDir": "DOWN",
+      "actualMovePct": -1.3687567830291,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771848000000,
+      "horizonH": 6,
+      "entryPrice": 66249.9,
+      "targetPrice": 64602.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.8387807218804908,
+      "actualDir": "DOWN",
+      "actualMovePct": -2.4860414883644997,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771848000000,
+      "horizonH": 8,
+      "entryPrice": 66249.9,
+      "targetPrice": 64445.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.8387807218804908,
+      "actualDir": "DOWN",
+      "actualMovePct": -2.7230229781478807,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771855200000,
+      "horizonH": 2,
+      "entryPrice": 65895.5,
+      "targetPrice": 65343.1,
+      "predictedDir": "DOWN",
+      "confidence": 0.8087959137579976,
+      "actualDir": "DOWN",
+      "actualMovePct": -0.8382970005539095,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771855200000,
+      "horizonH": 4,
+      "entryPrice": 65895.5,
+      "targetPrice": 64602.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.8087959137579976,
+      "actualDir": "DOWN",
+      "actualMovePct": -1.9615907004271893,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771855200000,
+      "horizonH": 6,
+      "entryPrice": 65895.5,
+      "targetPrice": 64445.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.8087959137579976,
+      "actualDir": "DOWN",
+      "actualMovePct": -2.199846727014741,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771855200000,
+      "horizonH": 8,
+      "entryPrice": 65895.5,
+      "targetPrice": 64694.3,
+      "predictedDir": "DOWN",
+      "confidence": 0.8087959137579976,
+      "actualDir": "DOWN",
+      "actualMovePct": -1.822886236541186,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771880400000,
+      "horizonH": 2,
+      "entryPrice": 64554.6,
+      "targetPrice": 64625.8,
+      "predictedDir": "DOWN",
+      "confidence": 0.8094925371238003,
+      "actualDir": "UP",
+      "actualMovePct": 0.11029423154973365,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771880400000,
+      "horizonH": 4,
+      "entryPrice": 64554.6,
+      "targetPrice": 64131,
+      "predictedDir": "DOWN",
+      "confidence": 0.8094925371238003,
+      "actualDir": "DOWN",
+      "actualMovePct": -0.6561887146694404,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771880400000,
+      "horizonH": 6,
+      "entryPrice": 64554.6,
+      "targetPrice": 63570.5,
+      "predictedDir": "DOWN",
+      "confidence": 0.8094925371238003,
+      "actualDir": "DOWN",
+      "actualMovePct": -1.5244459728663775,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771880400000,
+      "horizonH": 8,
+      "entryPrice": 64554.6,
+      "targetPrice": 63067.5,
+      "predictedDir": "DOWN",
+      "confidence": 0.8094925371238003,
+      "actualDir": "DOWN",
+      "actualMovePct": -2.3036313446291956,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771891200000,
+      "horizonH": 2,
+      "entryPrice": 64910.2,
+      "targetPrice": 64080.3,
+      "predictedDir": "DOWN",
+      "confidence": 0.8397085994312907,
+      "actualDir": "DOWN",
+      "actualMovePct": -1.2785355768430757,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771891200000,
+      "horizonH": 4,
+      "entryPrice": 64910.2,
+      "targetPrice": 63338.2,
+      "predictedDir": "DOWN",
+      "confidence": 0.8397085994312907,
+      "actualDir": "DOWN",
+      "actualMovePct": -2.4218073584737065,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771891200000,
+      "horizonH": 6,
+      "entryPrice": 64910.2,
+      "targetPrice": 63050.4,
+      "predictedDir": "DOWN",
+      "confidence": 0.8397085994312907,
+      "actualDir": "DOWN",
+      "actualMovePct": -2.8651891382248023,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771891200000,
+      "horizonH": 8,
+      "entryPrice": 64910.2,
+      "targetPrice": 63357.2,
+      "predictedDir": "DOWN",
+      "confidence": 0.8397085994312907,
+      "actualDir": "DOWN",
+      "actualMovePct": -2.392536149942536,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771927200000,
+      "horizonH": 2,
+      "entryPrice": 63250,
+      "targetPrice": 62936,
+      "predictedDir": "DOWN",
+      "confidence": 0.8102858745716103,
+      "actualDir": "DOWN",
+      "actualMovePct": -0.4964426877470356,
+      "hit": true
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771927200000,
+      "horizonH": 4,
+      "entryPrice": 63250,
+      "targetPrice": 63422,
+      "predictedDir": "DOWN",
+      "confidence": 0.8102858745716103,
+      "actualDir": "UP",
+      "actualMovePct": 0.2719367588932807,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771927200000,
+      "horizonH": 6,
+      "entryPrice": 63250,
+      "targetPrice": 64227.3,
+      "predictedDir": "DOWN",
+      "confidence": 0.8102858745716103,
+      "actualDir": "UP",
+      "actualMovePct": 1.5451383399209533,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771927200000,
+      "horizonH": 8,
+      "entryPrice": 63250,
+      "targetPrice": 64395.1,
+      "predictedDir": "DOWN",
+      "confidence": 0.8102858745716103,
+      "actualDir": "UP",
+      "actualMovePct": 1.8104347826086935,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771934400000,
+      "horizonH": 2,
+      "entryPrice": 62936,
+      "targetPrice": 63422,
+      "predictedDir": "DOWN",
+      "confidence": 0.8076265494064816,
+      "actualDir": "UP",
+      "actualMovePct": 0.7722130418202618,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771934400000,
+      "horizonH": 4,
+      "entryPrice": 62936,
+      "targetPrice": 64227.3,
+      "predictedDir": "DOWN",
+      "confidence": 0.8076265494064816,
+      "actualDir": "UP",
+      "actualMovePct": 2.0517668742849926,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771934400000,
+      "horizonH": 6,
+      "entryPrice": 62936,
+      "targetPrice": 64395.1,
+      "predictedDir": "DOWN",
+      "confidence": 0.8076265494064816,
+      "actualDir": "UP",
+      "actualMovePct": 2.3183869327570843,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771934400000,
+      "horizonH": 8,
+      "entryPrice": 62936,
+      "targetPrice": 64430.8,
+      "predictedDir": "DOWN",
+      "confidence": 0.8076265494064816,
+      "actualDir": "UP",
+      "actualMovePct": 2.375111224100678,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771938000000,
+      "horizonH": 2,
+      "entryPrice": 62877,
+      "targetPrice": 63933.4,
+      "predictedDir": "DOWN",
+      "confidence": 0.855902357612143,
+      "actualDir": "UP",
+      "actualMovePct": 1.68010560300269,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771938000000,
+      "horizonH": 4,
+      "entryPrice": 62877,
+      "targetPrice": 64188.8,
+      "predictedDir": "DOWN",
+      "confidence": 0.855902357612143,
+      "actualDir": "UP",
+      "actualMovePct": 2.086295465750597,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771938000000,
+      "horizonH": 6,
+      "entryPrice": 62877,
+      "targetPrice": 64405.4,
+      "predictedDir": "DOWN",
+      "confidence": 0.855902357612143,
+      "actualDir": "UP",
+      "actualMovePct": 2.4307775498194912,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771938000000,
+      "horizonH": 8,
+      "entryPrice": 62877,
+      "targetPrice": 64009.2,
+      "predictedDir": "DOWN",
+      "confidence": 0.855902357612143,
+      "actualDir": "UP",
+      "actualMovePct": 1.800658428360127,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771941600000,
+      "horizonH": 2,
+      "entryPrice": 63422,
+      "targetPrice": 64227.3,
+      "predictedDir": "DOWN",
+      "confidence": 0.8552335643736823,
+      "actualDir": "UP",
+      "actualMovePct": 1.2697486676547616,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771941600000,
+      "horizonH": 4,
+      "entryPrice": 63422,
+      "targetPrice": 64395.1,
+      "predictedDir": "DOWN",
+      "confidence": 0.8552335643736823,
+      "actualDir": "UP",
+      "actualMovePct": 1.5343256283308608,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771941600000,
+      "horizonH": 6,
+      "entryPrice": 63422,
+      "targetPrice": 64430.8,
+      "predictedDir": "DOWN",
+      "confidence": 0.8552335643736823,
+      "actualDir": "UP",
+      "actualMovePct": 1.590615243921672,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771941600000,
+      "horizonH": 8,
+      "entryPrice": 63422,
+      "targetPrice": 64091.8,
+      "predictedDir": "DOWN",
+      "confidence": 0.8552335643736823,
+      "actualDir": "UP",
+      "actualMovePct": 1.0561004067989073,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771970400000,
+      "horizonH": 2,
+      "entryPrice": 64091.8,
+      "targetPrice": 64188.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.807164422196032,
+      "actualDir": "UP",
+      "actualMovePct": 0.15150144012182298,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771970400000,
+      "horizonH": 4,
+      "entryPrice": 64091.8,
+      "targetPrice": 65852,
+      "predictedDir": "DOWN",
+      "confidence": 0.807164422196032,
+      "actualDir": "UP",
+      "actualMovePct": 2.7463731709828667,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771970400000,
+      "horizonH": 6,
+      "entryPrice": 64091.8,
+      "targetPrice": 65427.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.807164422196032,
+      "actualDir": "UP",
+      "actualMovePct": 2.08466605712431,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771970400000,
+      "horizonH": 8,
+      "entryPrice": 64091.8,
+      "targetPrice": 64862.6,
+      "predictedDir": "DOWN",
+      "confidence": 0.807164422196032,
+      "actualDir": "UP",
+      "actualMovePct": 1.2026499489794258,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771977600000,
+      "horizonH": 2,
+      "entryPrice": 64188.9,
+      "targetPrice": 65852,
+      "predictedDir": "DOWN",
+      "confidence": 0.8017653807735379,
+      "actualDir": "UP",
+      "actualMovePct": 2.590946409737507,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771977600000,
+      "horizonH": 4,
+      "entryPrice": 64188.9,
+      "targetPrice": 65427.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.8017653807735379,
+      "actualDir": "UP",
+      "actualMovePct": 1.930240275187766,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771977600000,
+      "horizonH": 6,
+      "entryPrice": 64188.9,
+      "targetPrice": 64862.6,
+      "predictedDir": "DOWN",
+      "confidence": 0.8017653807735379,
+      "actualDir": "UP",
+      "actualMovePct": 1.0495584127473707,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1771977600000,
+      "horizonH": 8,
+      "entryPrice": 64188.9,
+      "targetPrice": 65490.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.8017653807735379,
+      "actualDir": "UP",
+      "actualMovePct": 2.028388085790534,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1772229600000,
+      "horizonH": 2,
+      "entryPrice": 65609,
+      "targetPrice": 65906.3,
+      "predictedDir": "DOWN",
+      "confidence": 0.8364513863300096,
+      "actualDir": "UP",
+      "actualMovePct": 0.4531390510448306,
+      "hit": false
+    },
+    {
+      "symbol": "BTCUSDT",
+      "tsPrediction": 1772229600000,
+      "horizonH": 4,
+      "entryPrice": 65609,
+      "targetPrice": 65926.9,
+      "predictedDir": "DOWN",
+      "confidence": 0.8364513863300096,
+      "actualDir": "UP",
+      "actualMovePct": 0.4845371823987474,
+      "hit": false
+    }
+  ]
+}

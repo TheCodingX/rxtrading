@@ -1,0 +1,570 @@
+{
+  "config": {
+    "slM": 2.5,
+    "tpR": 3,
+    "fwd": 2,
+    "thrP": 65,
+    "maxPos": 1,
+    "timeout": 60,
+    "adxF": 25,
+    "mc": 0.005
+  },
+  "features": [
+    "RSI14",
+    "RSI7",
+    "StochK",
+    "BBpos",
+    "MACDh",
+    "MACDs",
+    "ADXv",
+    "E9_21",
+    "E21_50",
+    "Ret1",
+    "Ret3",
+    "Ret6",
+    "Ret12",
+    "VolR",
+    "ClsP",
+    "FR",
+    "FRc3",
+    "FRc6",
+    "Basis",
+    "BasisMA",
+    "BasisZ",
+    "BasisSlope",
+    "BasisVsFR",
+    "HrSin"
+  ],
+  "pairs": {
+    "BTCUSDT": {
+      "features": [
+        {
+          "name": "BasisVsFR",
+          "idx": 22,
+          "corr": 0.046541
+        },
+        {
+          "name": "Basis",
+          "idx": 18,
+          "corr": 0.045701
+        },
+        {
+          "name": "BasisSlope",
+          "idx": 21,
+          "corr": 0.045701
+        },
+        {
+          "name": "FR",
+          "idx": 15,
+          "corr": 0.034175
+        },
+        {
+          "name": "BasisZ",
+          "idx": 20,
+          "corr": 0.031848
+        },
+        {
+          "name": "Ret3",
+          "idx": 10,
+          "corr": 0.031536
+        },
+        {
+          "name": "FRc3",
+          "idx": 16,
+          "corr": 0.028656
+        },
+        {
+          "name": "MACDs",
+          "idx": 5,
+          "corr": 0.027321
+        },
+        {
+          "name": "FRc6",
+          "idx": 17,
+          "corr": 0.02521
+        },
+        {
+          "name": "HrSin",
+          "idx": 23,
+          "corr": -0.017845
+        },
+        {
+          "name": "ClsP",
+          "idx": 14,
+          "corr": -0.017587
+        },
+        {
+          "name": "StochK",
+          "idx": 2,
+          "corr": -0.016477
+        }
+      ],
+      "threshold": 0.72646,
+      "count": 12
+    },
+    "ETHUSDT": {
+      "features": [
+        {
+          "name": "HrSin",
+          "idx": 23,
+          "corr": -0.033712
+        },
+        {
+          "name": "MACDs",
+          "idx": 5,
+          "corr": 0.031026
+        },
+        {
+          "name": "FR",
+          "idx": 15,
+          "corr": 0.030536
+        },
+        {
+          "name": "FRc3",
+          "idx": 16,
+          "corr": 0.029512
+        },
+        {
+          "name": "FRc6",
+          "idx": 17,
+          "corr": 0.025724
+        },
+        {
+          "name": "VolR",
+          "idx": 13,
+          "corr": 0.025034
+        },
+        {
+          "name": "Ret1",
+          "idx": 9,
+          "corr": 0.023037
+        },
+        {
+          "name": "BBpos",
+          "idx": 3,
+          "corr": -0.02097
+        },
+        {
+          "name": "ADXv",
+          "idx": 6,
+          "corr": -0.019278
+        },
+        {
+          "name": "Ret3",
+          "idx": 10,
+          "corr": 0.019035
+        },
+        {
+          "name": "RSI7",
+          "idx": 1,
+          "corr": -0.018327
+        },
+        {
+          "name": "StochK",
+          "idx": 2,
+          "corr": -0.0147
+        }
+      ],
+      "threshold": 0.060657,
+      "count": 12
+    },
+    "SOLUSDT": {
+      "features": [
+        {
+          "name": "MACDs",
+          "idx": 5,
+          "corr": 0.055711
+        },
+        {
+          "name": "Ret3",
+          "idx": 10,
+          "corr": 0.051337
+        },
+        {
+          "name": "Basis",
+          "idx": 18,
+          "corr": 0.038387
+        },
+        {
+          "name": "BasisSlope",
+          "idx": 21,
+          "corr": 0.038387
+        },
+        {
+          "name": "BasisVsFR",
+          "idx": 22,
+          "corr": 0.0378
+        },
+        {
+          "name": "E21_50",
+          "idx": 8,
+          "corr": -0.036553
+        },
+        {
+          "name": "Ret1",
+          "idx": 9,
+          "corr": 0.034689
+        },
+        {
+          "name": "BasisZ",
+          "idx": 20,
+          "corr": 0.028605
+        },
+        {
+          "name": "HrSin",
+          "idx": 23,
+          "corr": -0.026766
+        },
+        {
+          "name": "Ret6",
+          "idx": 11,
+          "corr": 0.024832
+        },
+        {
+          "name": "VolR",
+          "idx": 13,
+          "corr": -0.024561
+        },
+        {
+          "name": "E9_21",
+          "idx": 7,
+          "corr": -0.023228
+        }
+      ],
+      "threshold": 0.697755,
+      "count": 12
+    },
+    "BNBUSDT": {
+      "features": [
+        {
+          "name": "HrSin",
+          "idx": 23,
+          "corr": -0.049239
+        },
+        {
+          "name": "BasisMA",
+          "idx": 19,
+          "corr": 0.040747
+        },
+        {
+          "name": "Basis",
+          "idx": 18,
+          "corr": 0.039816
+        },
+        {
+          "name": "BasisSlope",
+          "idx": 21,
+          "corr": 0.039816
+        },
+        {
+          "name": "BasisVsFR",
+          "idx": 22,
+          "corr": 0.039779
+        },
+        {
+          "name": "Ret3",
+          "idx": 10,
+          "corr": 0.032782
+        },
+        {
+          "name": "MACDs",
+          "idx": 5,
+          "corr": 0.023597
+        },
+        {
+          "name": "FRc3",
+          "idx": 16,
+          "corr": 0.022699
+        },
+        {
+          "name": "Ret6",
+          "idx": 11,
+          "corr": 0.020826
+        },
+        {
+          "name": "Ret1",
+          "idx": 9,
+          "corr": 0.020631
+        },
+        {
+          "name": "ClsP",
+          "idx": 14,
+          "corr": -0.019465
+        },
+        {
+          "name": "StochK",
+          "idx": 2,
+          "corr": -0.019304
+        }
+      ],
+      "threshold": 0.714394,
+      "count": 12
+    },
+    "XRPUSDT": {
+      "features": [
+        {
+          "name": "BasisVsFR",
+          "idx": 22,
+          "corr": 0.057221
+        },
+        {
+          "name": "Basis",
+          "idx": 18,
+          "corr": 0.056399
+        },
+        {
+          "name": "BasisSlope",
+          "idx": 21,
+          "corr": 0.056399
+        },
+        {
+          "name": "Ret3",
+          "idx": 10,
+          "corr": 0.042231
+        },
+        {
+          "name": "FRc6",
+          "idx": 17,
+          "corr": 0.038208
+        },
+        {
+          "name": "FR",
+          "idx": 15,
+          "corr": 0.033649
+        },
+        {
+          "name": "StochK",
+          "idx": 2,
+          "corr": -0.033538
+        },
+        {
+          "name": "FRc3",
+          "idx": 16,
+          "corr": 0.032897
+        },
+        {
+          "name": "Ret1",
+          "idx": 9,
+          "corr": 0.032797
+        },
+        {
+          "name": "BasisZ",
+          "idx": 20,
+          "corr": 0.032033
+        },
+        {
+          "name": "Ret6",
+          "idx": 11,
+          "corr": 0.030046
+        },
+        {
+          "name": "BasisMA",
+          "idx": 19,
+          "corr": 0.029277
+        }
+      ],
+      "threshold": 1.153266,
+      "count": 12
+    },
+    "ADAUSDT": {
+      "features": [
+        {
+          "name": "FRc6",
+          "idx": 17,
+          "corr": 0.050673
+        },
+        {
+          "name": "E21_50",
+          "idx": 8,
+          "corr": -0.037756
+        },
+        {
+          "name": "Ret6",
+          "idx": 11,
+          "corr": 0.037229
+        },
+        {
+          "name": "MACDh",
+          "idx": 4,
+          "corr": 0.036527
+        },
+        {
+          "name": "MACDs",
+          "idx": 5,
+          "corr": 0.036509
+        },
+        {
+          "name": "FRc3",
+          "idx": 16,
+          "corr": 0.032549
+        },
+        {
+          "name": "Ret3",
+          "idx": 10,
+          "corr": 0.03229
+        },
+        {
+          "name": "HrSin",
+          "idx": 23,
+          "corr": -0.028853
+        },
+        {
+          "name": "RSI7",
+          "idx": 1,
+          "corr": -0.028364
+        },
+        {
+          "name": "FR",
+          "idx": 15,
+          "corr": 0.025953
+        },
+        {
+          "name": "ADXv",
+          "idx": 6,
+          "corr": 0.025836
+        },
+        {
+          "name": "BasisMA",
+          "idx": 19,
+          "corr": 0.025505
+        }
+      ],
+      "threshold": 0.200233,
+      "count": 12
+    },
+    "AVAXUSDT": {
+      "features": [
+        {
+          "name": "MACDs",
+          "idx": 5,
+          "corr": 0.045038
+        },
+        {
+          "name": "FRc3",
+          "idx": 16,
+          "corr": 0.043412
+        },
+        {
+          "name": "HrSin",
+          "idx": 23,
+          "corr": -0.04258
+        },
+        {
+          "name": "FRc6",
+          "idx": 17,
+          "corr": 0.037139
+        },
+        {
+          "name": "Ret1",
+          "idx": 9,
+          "corr": 0.036776
+        },
+        {
+          "name": "ADXv",
+          "idx": 6,
+          "corr": -0.036245
+        },
+        {
+          "name": "Ret3",
+          "idx": 10,
+          "corr": 0.035161
+        },
+        {
+          "name": "MACDh",
+          "idx": 4,
+          "corr": 0.034569
+        },
+        {
+          "name": "VolR",
+          "idx": 13,
+          "corr": 0.031895
+        },
+        {
+          "name": "BasisMA",
+          "idx": 19,
+          "corr": 0.03124
+        },
+        {
+          "name": "StochK",
+          "idx": 2,
+          "corr": -0.030533
+        },
+        {
+          "name": "RSI7",
+          "idx": 1,
+          "corr": -0.027674
+        }
+      ],
+      "threshold": 0.188598,
+      "count": 12
+    },
+    "DOGEUSDT": {
+      "features": [
+        {
+          "name": "FRc3",
+          "idx": 16,
+          "corr": 0.074092
+        },
+        {
+          "name": "FRc6",
+          "idx": 17,
+          "corr": 0.063354
+        },
+        {
+          "name": "FR",
+          "idx": 15,
+          "corr": 0.063164
+        },
+        {
+          "name": "Ret6",
+          "idx": 11,
+          "corr": 0.056431
+        },
+        {
+          "name": "Ret3",
+          "idx": 10,
+          "corr": 0.049753
+        },
+        {
+          "name": "MACDs",
+          "idx": 5,
+          "corr": 0.046481
+        },
+        {
+          "name": "MACDh",
+          "idx": 4,
+          "corr": 0.041219
+        },
+        {
+          "name": "BasisMA",
+          "idx": 19,
+          "corr": 0.038699
+        },
+        {
+          "name": "StochK",
+          "idx": 2,
+          "corr": -0.036184
+        },
+        {
+          "name": "RSI7",
+          "idx": 1,
+          "corr": -0.035842
+        },
+        {
+          "name": "E21_50",
+          "idx": 8,
+          "corr": -0.034387
+        },
+        {
+          "name": "Ret12",
+          "idx": 12,
+          "corr": 0.028709
+        }
+      ],
+      "threshold": 0.313858,
+      "count": 12
+    }
+  },
+  "trainedAt": "2026-04-15T00:00:00.000Z",
+  "trainDays": 150
+}

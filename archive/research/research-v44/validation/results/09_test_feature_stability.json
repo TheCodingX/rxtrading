@@ -1,0 +1,204 @@
+{
+  "test": "09 — Feature Stability",
+  "runtime_s": 4.241,
+  "n_windows": 5,
+  "consistency": {
+    "ADAUSDT": {
+      "top1s": [
+        "ema9_21",
+        "ema9_21",
+        "ret_1h",
+        "ret_1h",
+        "ret_3h"
+      ],
+      "most_common": [
+        "ema9_21",
+        0.4
+      ]
+    },
+    "ARBUSDT": {
+      "top1s": [
+        "ret_6h",
+        "ret_3h",
+        "ema9_21",
+        "ema9_21",
+        "ema9_21"
+      ],
+      "most_common": [
+        "ema9_21",
+        0.6
+      ]
+    },
+    "ETHUSDT": {
+      "top1s": [
+        "ret_6h",
+        "ret_3h",
+        "ret_3h",
+        "ret_1h",
+        "ret_3h"
+      ],
+      "most_common": [
+        "ret_3h",
+        0.6
+      ]
+    },
+    "XRPUSDT": {
+      "top1s": [
+        "ret_6h",
+        "ret_3h",
+        "ema9_21",
+        "ret_1h",
+        "ret_3h"
+      ],
+      "most_common": [
+        "ret_3h",
+        0.4
+      ]
+    },
+    "BTCUSDT": {
+      "top1s": [
+        "ret_6h",
+        "ret_3h",
+        "ret_3h",
+        "ret_3h",
+        "ret_3h"
+      ],
+      "most_common": [
+        "ret_3h",
+        0.8
+      ]
+    },
+    "1000PEPEUSDT": {
+      "top1s": [
+        "ret_6h",
+        "ret_1h",
+        "ret_1h",
+        "ret_6h",
+        "ret_6h"
+      ],
+      "most_common": [
+        "ret_6h",
+        0.6
+      ]
+    },
+    "ATOMUSDT": {
+      "top1s": [
+        "ema9_21",
+        "ema9_21",
+        "ema9_21",
+        "ema9_21",
+        "ret_1h"
+      ],
+      "most_common": [
+        "ema9_21",
+        0.8
+      ]
+    },
+    "LINKUSDT": {
+      "top1s": [
+        "ret_6h",
+        "ret_3h",
+        "ema9_21",
+        "ret_1h",
+        "ema9_21"
+      ],
+      "most_common": [
+        "ema9_21",
+        0.4
+      ]
+    },
+    "SOLUSDT": {
+      "top1s": [
+        "ema9_21",
+        "ret_3h",
+        "ret_3h",
+        "ret_1h",
+        "ret_3h"
+      ],
+      "most_common": [
+        "ret_3h",
+        0.6
+      ]
+    },
+    "LTCUSDT": {
+      "top1s": [
+        "ema9_21",
+        "ret_1h",
+        "ret_1h",
+        "ret_1h",
+        "ret_6h"
+      ],
+      "most_common": [
+        "ret_1h",
+        0.6
+      ]
+    },
+    "DOTUSDT": {
+      "top1s": [
+        "ema9_21",
+        "ema9_21",
+        "ret_1h",
+        "ret_1h",
+        "ret_3h"
+      ],
+      "most_common": [
+        "ema9_21",
+        0.4
+      ]
+    },
+    "NEARUSDT": {
+      "top1s": [
+        "ema9_21",
+        "ret_3h",
+        "ret_1h",
+        "ret_1h",
+        "ema9_21"
+      ],
+      "most_common": [
+        "ema9_21",
+        0.4
+      ]
+    },
+    "AVAXUSDT": {
+      "top1s": [
+        "ret_1h",
+        "ret_1h",
+        "ret_1h",
+        "ret_1h",
+        "ret_3h"
+      ],
+      "most_common": [
+        "ret_1h",
+        0.8
+      ]
+    },
+    "DOGEUSDT": {
+      "top1s": [
+        "ema9_21",
+        "ret_6h",
+        "ret_6h",
+        "ret_1h",
+        "ret_3h"
+      ],
+      "most_common": [
+        "ret_6h",
+        0.4
+      ]
+    },
+    "BNBUSDT": {
+      "top1s": [
+        "ret_3h",
+        "ret_3h",
+        "ret_3h",
+        "ret_1h",
+        "ret_3h"
+      ],
+      "most_common": [
+        "ret_3h",
+        0.8
+      ]
+    }
+  },
+  "avg_consistency_pct": 57.33333333333335,
+  "gate_pass": false
+}

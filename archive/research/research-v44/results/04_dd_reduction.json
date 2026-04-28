@@ -1,0 +1,125 @@
+{
+  "phase": "4 — DD Reduction",
+  "runtime_s": 4.649,
+  "hrp": {
+    "weights": {
+      "ADAUSDT": 0.005485926038074,
+      "ARBUSDT": 0.0020942364331830087,
+      "ETHUSDT": 0.005318928593649665,
+      "XRPUSDT": 0.004493144329289855,
+      "BTCUSDT": 0.01204666138851593,
+      "1000PEPEUSDT": 0.002355237178574455,
+      "ATOMUSDT": 0.003939004358024263,
+      "LINKUSDT": 0.0029719396218818995,
+      "SOLUSDT": 0.004135954719998937,
+      "LTCUSDT": 0.00439172045211008,
+      "DOTUSDT": 0.002618973269648095,
+      "NEARUSDT": 0.0025409853916270385,
+      "AVAXUSDT": 0.003434064263195352,
+      "DOGEUSDT": 0.002886072829603227,
+      "BNBUSDT": 0.007953817799290854
+    },
+    "order": [
+      "ADAUSDT",
+      "DOGEUSDT",
+      "LINKUSDT",
+      "ARBUSDT",
+      "DOTUSDT",
+      "1000PEPEUSDT",
+      "XRPUSDT",
+      "ATOMUSDT",
+      "ETHUSDT",
+      "BTCUSDT",
+      "SOLUSDT",
+      "AVAXUSDT",
+      "NEARUSDT",
+      "LTCUSDT",
+      "BNBUSDT"
+    ],
+    "n_linkage_steps": 14
+  },
+  "correlation_avg": 0.7598933596304162,
+  "entropy": {
+    "ADAUSDT": {
+      "p80": 2.082334785974129,
+      "flagged": 1172,
+      "total": 6576
+    },
+    "ARBUSDT": {
+      "p80": 2.0005025589838707,
+      "flagged": 1173,
+      "total": 6576
+    },
+    "ETHUSDT": {
+      "p80": 1.963632837727988,
+      "flagged": 1173,
+      "total": 6576
+    },
+    "XRPUSDT": {
+      "p80": 2.010083568191232,
+      "flagged": 1172,
+      "total": 6576
+    },
+    "BTCUSDT": {
+      "p80": 1.9206078444049575,
+      "flagged": 1172,
+      "total": 6576
+    },
+    "1000PEPEUSDT": {
+      "p80": 2.107399129256575,
+      "flagged": 1173,
+      "total": 6576
+    },
+    "ATOMUSDT": {
+      "p80": 2.1208405021819825,
+      "flagged": 1172,
+      "total": 6576
+    },
+    "LINKUSDT": {
+      "p80": 2.0405192123833333,
+      "flagged": 1172,
+      "total": 6576
+    },
+    "SOLUSDT": {
+      "p80": 2.118848918298177,
+      "flagged": 1173,
+      "total": 6576
+    },
+    "LTCUSDT": {
+      "p80": 1.969329753150331,
+      "flagged": 1172,
+      "total": 6576
+    },
+    "DOTUSDT": {
+      "p80": 2.052208361566084,
+      "flagged": 1172,
+      "total": 6576
+    },
+    "NEARUSDT": {
+      "p80": 1.9860397859368442,
+      "flagged": 1172,
+      "total": 6576
+    },
+    "AVAXUSDT": {
+      "p80": 1.9551839137139926,
+      "flagged": 1172,
+      "total": 6576
+    },
+    "DOGEUSDT": {
+      "p80": 2.0681387433391465,
+      "flagged": 1174,
+      "total": 6576
+    },
+    "BNBUSDT": {
+      "p80": 1.9935693994898047,
+      "flagged": 1173,
+      "total": 6576
+    }
+  },
+  "dd_brake": {
+    "thresholds": {
+      "14d": "15%→0.5x, 25%→stop 24h",
+      "30d": "35%→stop 72h"
+    }
+  }
+}

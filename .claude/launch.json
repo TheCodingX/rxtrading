@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "rxtrading",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "/Users/rocki/Documents/rxtrading/frontend"],
-      "port": 8765
+      "name": "rxtrading-local",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["http-server", "/Users/rocki/Documents/rxtrading/frontend", "-p", "8090", "-c-1", "--cors"],
+      "port": 8090
     }
   ]
 }

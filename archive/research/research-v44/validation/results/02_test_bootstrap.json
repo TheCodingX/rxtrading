@@ -1,0 +1,19 @@
+{
+  "test": "02 — Bootstrap",
+  "runtime_s": 5.453,
+  "n_trades": 4890,
+  "iterations": 2000,
+  "pf_real": 1.8545737331379073,
+  "pf_mean": 1.9520125148756104,
+  "pf_median": 1.8807250729175762,
+  "pf_ci95": [
+    1.070298384118201,
+    3.2559729572928573
+  ],
+  "frac_lt_1": 0.015,
+  "frac_lt_13": 0.0965,
+  "gate_median_pass": true,
+  "gate_frac1_pass": true,
+  "gate_frac13_pass": true,
+  "gate_pass": true
+}

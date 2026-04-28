@@ -16,7 +16,8 @@
       "Bash(node admin-cli.js generate 1 \"TestUser\")",
       "Bash(node admin-cli.js list)",
       "Bash(kill %1)",
-      "Bash(pkill -f \"node server.js\")"
+      "Bash(pkill -f \"node server.js\")",
+      "Bash(wc -l /Users/rocki/Documents/rxtrading/backtest-apex-*.js /Users/rocki/Documents/rxtrading/backtest-v1*-final*.js /Users/rocki/Documents/rxtrading/backtest-production*.js /Users/rocki/Documents/rxtrading/backtest-*-audit.js)"
     ]
   }
 }

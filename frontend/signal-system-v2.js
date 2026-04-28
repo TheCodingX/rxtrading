@@ -393,8 +393,31 @@
     loadSnapshot().catch(() => {});
     loadNotifications().catch(() => {});
     _setupBroadcastChannel();
-    _wsConnect();
+
+    // 2026-04-27 fix: anonymous users (no token) have no WS access (server requires auth).
+    // Skip WS entirely → REST fallback. When user logs in later, token check below promotes to WS.
+    const _initialToken = state.getToken && state.getToken();
+    if (!_initialToken) {
+      state.wsState = 'rest_fallback';
+    } else {
+      _wsConnect();
+    }
     _startRestFallback();
+
+    // 2026-04-27 fix2: poll for token availability post-login. If user logs in after init,
+    // upgrade from rest_fallback → WS. Check every 5s. Once promoted, stop polling.
+    let _tokenCheckTimer = setInterval(() => {
+      if (state.wsState === 'open' || state.wsState === 'connecting') {
+        clearInterval(_tokenCheckTimer);
+        return;
+      }
+      const tok = state.getToken && state.getToken();
+      if (tok) {
+        // Token now available — try WS connection
+        _wsConnect();
+      }
+    }, 5000);
+
     emit('initialized');
   }
 

@@ -1,0 +1,12 @@
+{
+  "test": "10 — Random Benchmark",
+  "runtime_s": 496.165,
+  "n_sim": 1000,
+  "v44_pf": 1.8545737331379073,
+  "v44_percentile": 99.8,
+  "random_mean": 0.9659445927344312,
+  "random_p50": 0.946408357340987,
+  "random_p95": 1.3834814745111053,
+  "random_p99": 1.6567968115300895,
+  "gate_pass": true
+}
