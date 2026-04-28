@@ -653,37 +653,38 @@ function evaluateFundingCarry(pair, bars1h){
   };
 }
 
-// Fetch 1h klines from Binance Futures (preferred) with spot fallback
-// 2026-04-27: bug fix — el chain hacía short-circuit en primer fallback no-null.
-// OKX cap=300 retornaba 300 bars y nunca se probaban Bybit/CryptoCompare que pueden dar 800+.
-// Fix: probar TODAS las fuentes, retornar la que tenga más bars (o min suficiente).
+// Fetch 1h klines with multi-source fallback chain.
+// 2026-04-27: confirmado por /api/v44/diag source_probes que Render IP tiene:
+//   Binance fapi/spot: 451 geo-block. Bybit: 403. CryptoCompare: 200 pero parser falla.
+//   Solo OKX responde con 200 + 300 bars (capped). Soluci\u00f3n: OKX paginated.
 async function fetchBars1h(symbol, limit = 800){
-  // Browser-like UA porque algunos exchanges bloquean default node fetch UA.
   const BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   const fetchOpts = { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' } };
-  const REQUIRED_MIN = Math.min(limit, 770); // V44 z-score lookback necesita ≥770
+  const REQUIRED_MIN = Math.min(limit, 770);
 
-  // Helper: si ya tenemos bars suficientes, no seguir probando
   let best = null;
-  const considerCandidate = (bars, source) => {
+  const considerCandidate = (bars) => {
     if (!bars || bars.length === 0) return false;
     if (!best || bars.length > best.length) best = bars;
-    return bars.length >= REQUIRED_MIN; // true = suficiente, podemos parar
+    return bars.length >= REQUIRED_MIN;
   };
 
-  // 1. Binance fapi (mejor calidad, falla 451 desde Render — pero si funciona, da ≤1500)
+  // Helper: normalizar 1000PEPE/1000SHIB → PEPE/SHIB para exchanges sin 1000-prefix
+  const stripPrefix = (s) => s.startsWith('1000') ? s.slice(4) : s;
+
+  // 1. Binance fapi (puede 451 desde Render)
   try {
     const r = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}`, fetchOpts);
     if (r.ok) {
       const arr = await r.json();
       if (Array.isArray(arr) && arr.length > 0) {
         const bars = arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
-        if (considerCandidate(bars, 'fapi')) return bars;
+        if (considerCandidate(bars)) return bars;
       }
     }
   } catch(e){}
 
-  // 2. Bybit linear perp (limit=1000 — debería dar 800 sin problema)
+  // 2. Bybit linear perp (puede 403 desde Render)
   try {
     const r = await fetch(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=60&limit=${Math.min(limit, 1000)}`, fetchOpts);
     if (r.ok) {
@@ -691,56 +692,92 @@ async function fetchBars1h(symbol, limit = 800){
       const list = j?.result?.list;
       if (Array.isArray(list) && list.length > 0) {
         const bars = list.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) })).reverse();
-        if (considerCandidate(bars, 'bybit')) return bars;
+        if (considerCandidate(bars)) return bars;
       }
     }
   } catch(e){}
 
-  // 3. CryptoCompare (universal, limit hasta 2000 — siempre debería suplir)
+  // 3. OKX paginated history-candles (instId-USDT-SWAP, 300 por call, paginar back con `before=ts`)
+  // Acumula 4 calls × 300 = 1200 bars (>770 requerido) en ~1.2s
   try {
     if (symbol.endsWith('USDT')) {
-      const base = symbol.slice(0, -4);
-      // Normalizar 1000PEPE/1000SHIB → PEPE/SHIB (CryptoCompare no usa 1000-prefix)
-      const ccBase = base.startsWith('1000') ? base.slice(4) : base;
-      const r = await fetch(`https://min-api.cryptocompare.com/data/v2/histohour?fsym=${ccBase}&tsym=USDT&limit=${Math.min(limit, 2000)}`, fetchOpts);
-      if (r.ok) {
-        const j = await r.json();
-        const arr = j?.Data?.Data;
-        if (Array.isArray(arr) && arr.length > 0) {
-          const bars = arr.map(k => ({ t: parseInt(k.time) * 1000, c: parseFloat(k.close) }));
-          if (considerCandidate(bars, 'cryptocompare')) return bars;
+      const base = stripPrefix(symbol.slice(0, -4));
+      const okxSym = `${base}-USDT-SWAP`;
+      const collected = [];
+      let beforeTs = null;
+      const MAX_CALLS = 4;
+      for (let i = 0; i < MAX_CALLS; i++){
+        const url = beforeTs
+          ? `https://www.okx.com/api/v5/market/history-candles?instId=${okxSym}&bar=1H&limit=300&before=${beforeTs}`
+          : `https://www.okx.com/api/v5/market/candles?instId=${okxSym}&bar=1H&limit=300`;
+        try {
+          const r = await fetch(url, fetchOpts);
+          if (!r.ok) break;
+          const j = await r.json();
+          const arr = j?.data;
+          if (!Array.isArray(arr) || arr.length === 0) break;
+          // OKX returns newest-first. Flatten to {t,c} preserving order.
+          const batch = arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
+          collected.push(...batch);
+          // Para siguiente call: oldest timestamp del batch actual (last item porque newest-first)
+          beforeTs = batch[batch.length - 1].t;
+          if (batch.length < 300) break; // no hay m\u00e1s historial
+          if (collected.length >= limit) break; // ya tenemos suficiente
+        } catch(e){ break; }
+      }
+      if (collected.length > 0){
+        // Sort oldest→newest, dedup por timestamp
+        collected.sort((a, b) => a.t - b.t);
+        const dedup = [];
+        let lastT = -1;
+        for (const b of collected){
+          if (b.t !== lastT){ dedup.push(b); lastT = b.t; }
         }
+        if (considerCandidate(dedup)) return dedup;
       }
     }
   } catch(e){}
 
-  // 4. Binance spot fallback (limit hasta 1000 — funciona desde casi todas las regiones)
+  // 4. CryptoCompare (universal, limit hasta 2000 — formato V2 con .Data.Data nested)
+  try {
+    if (symbol.endsWith('USDT')) {
+      const ccBase = stripPrefix(symbol.slice(0, -4));
+      // CryptoCompare a veces requiere tsym=USD si USDT no est\u00e1 disponible
+      const tryEndpoints = [
+        `https://min-api.cryptocompare.com/data/v2/histohour?fsym=${ccBase}&tsym=USDT&limit=${Math.min(limit, 2000)}`,
+        `https://min-api.cryptocompare.com/data/v2/histohour?fsym=${ccBase}&tsym=USD&limit=${Math.min(limit, 2000)}`
+      ];
+      for (const url of tryEndpoints){
+        try {
+          const r = await fetch(url, fetchOpts);
+          if (!r.ok) continue;
+          const j = await r.json();
+          // V2 estructura: { Response, Data: { Data: [...] } }
+          const arr = j?.Data?.Data || j?.Data;
+          if (Array.isArray(arr) && arr.length > 0){
+            const bars = arr
+              .filter(k => k && k.time && k.close)
+              .map(k => ({ t: parseInt(k.time) * 1000, c: parseFloat(k.close) }));
+            if (bars.length > 0 && considerCandidate(bars)) return bars;
+          }
+        } catch(e){}
+      }
+    }
+  } catch(e){}
+
+  // 5. Binance spot (puede 451)
   try {
     const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=${Math.min(limit, 1000)}`, fetchOpts);
     if (r.ok) {
       const arr = await r.json();
       if (Array.isArray(arr) && arr.length > 0) {
         const bars = arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
-        if (considerCandidate(bars, 'binance-spot')) return bars;
+        if (considerCandidate(bars)) return bars;
       }
     }
   } catch(e){}
 
-  // 5. OKX (last resort, cap=300 — solo si todo lo anterior falló)
-  try {
-    const okxSym = symbol.endsWith('USDT') ? `${symbol.slice(0, -4)}-USDT-SWAP` : symbol;
-    const r = await fetch(`https://www.okx.com/api/v5/market/candles?instId=${okxSym}&bar=1H&limit=${Math.min(limit, 300)}`, fetchOpts);
-    if (r.ok) {
-      const j = await r.json();
-      const arr = j?.data;
-      if (Array.isArray(arr) && arr.length > 0) {
-        const bars = arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) })).reverse();
-        considerCandidate(bars, 'okx');
-      }
-    }
-  } catch(e){}
-
-  // Retornar el mejor candidato encontrado (puede ser <REQUIRED pero al menos no null)
+  // Retornar el mejor candidato (puede ser <REQUIRED pero al menos no null)
   return best;
 }
 
