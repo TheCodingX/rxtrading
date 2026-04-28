@@ -896,6 +896,7 @@ app.get('/api/v44/diag', async (req, res) => {
     const sourceProbes = await Promise.all([
       probe('binance-fapi', 'https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=800', (j) => Array.isArray(j) ? j.length : 0),
       probe('bybit',        'https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval=60&limit=1000', (j) => j?.result?.list?.length || 0),
+      probe('coingecko',    'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=40&interval=hourly', (j) => j?.prices?.length || 0),
       probe('cryptocompare','https://min-api.cryptocompare.com/data/v2/histohour?fsym=BTC&tsym=USDT&limit=800', (j) => j?.Data?.Data?.length || 0),
       probe('binance-spot', 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=800', (j) => Array.isArray(j) ? j.length : 0),
       probe('okx',          'https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1H&limit=300', (j) => j?.data?.length || 0)

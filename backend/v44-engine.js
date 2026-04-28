@@ -653,10 +653,20 @@ function evaluateFundingCarry(pair, bars1h){
   };
 }
 
+// CoinGecko symbol → coin id mapping (free tier, no auth, hourly bars up to 90d)
+// Coverage: todos los pares del APEX universe
+const COINGECKO_ID_MAP = {
+  BTCUSDT: 'bitcoin', ETHUSDT: 'ethereum', SOLUSDT: 'solana', BNBUSDT: 'binancecoin',
+  XRPUSDT: 'ripple', ADAUSDT: 'cardano', DOGEUSDT: 'dogecoin', LINKUSDT: 'chainlink',
+  ARBUSDT: 'arbitrum', ATOMUSDT: 'cosmos', '1000PEPEUSDT': 'pepe', TRXUSDT: 'tron',
+  NEARUSDT: 'near', POLUSDT: 'matic-network', INJUSDT: 'injective-protocol',
+  SUIUSDT: 'sui', RENDERUSDT: 'render-token', AVAXUSDT: 'avalanche-2',
+  DOTUSDT: 'polkadot', '1000SHIBUSDT': 'shiba-inu', OPUSDT: 'optimism',
+  JUPUSDT: 'jupiter-exchange-solana'
+};
+
 // Fetch 1h klines with multi-source fallback chain.
-// 2026-04-27: confirmado por /api/v44/diag source_probes que Render IP tiene:
-//   Binance fapi/spot: 451 geo-block. Bybit: 403. CryptoCompare: 200 pero parser falla.
-//   Solo OKX responde con 200 + 300 bars (capped). Soluci\u00f3n: OKX paginated.
+// 2026-04-27: Render IP geo-blocks Binance/Bybit. Solution: CoinGecko (universal, no auth).
 async function fetchBars1h(symbol, limit = 800){
   const BROWSER_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
   const fetchOpts = { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' } };
@@ -697,36 +707,73 @@ async function fetchBars1h(symbol, limit = 800){
     }
   } catch(e){}
 
-  // 3. OKX paginated history-candles (instId-USDT-SWAP, 300 por call, paginar back con `before=ts`)
-  // Acumula 4 calls × 300 = 1200 bars (>770 requerido) en ~1.2s
+  // 3. CoinGecko (FREE TIER, no auth, hourly hasta 90d, public, no geo-block)
+  // Endpoint /coins/{id}/market_chart con days=35 → ~840 bars hourly close prices
+  try {
+    const cgId = COINGECKO_ID_MAP[symbol];
+    if (cgId) {
+      const days = 40; // 40 días × 24h = 960 bars (>770 requerido)
+      const url = `https://api.coingecko.com/api/v3/coins/${cgId}/market_chart?vs_currency=usd&days=${days}&interval=hourly`;
+      const r = await fetch(url, fetchOpts);
+      if (r.ok) {
+        const j = await r.json();
+        const prices = j?.prices;
+        if (Array.isArray(prices) && prices.length > 0) {
+          // CoinGecko: [[ts_ms, price], ...] oldest-first
+          const bars = prices.map(p => ({ t: parseInt(p[0]), c: parseFloat(p[1]) }));
+          if (considerCandidate(bars)) return bars;
+        }
+      }
+    }
+  } catch(e){}
+
+  // 4. OKX paginated. Two endpoints with distinct rules:
+  //   - /market/candles: limit max 300, returns recent bars
+  //   - /market/history-candles: limit max 100 (silently capped), supports `after=<ts>` for older bars
+  // Strategy: 1 call /candles (300) + N calls /history-candles?after=<oldestTs>&limit=100 to fill ≥770
   try {
     if (symbol.endsWith('USDT')) {
       const base = stripPrefix(symbol.slice(0, -4));
       const okxSym = `${base}-USDT-SWAP`;
       const collected = [];
-      let beforeTs = null;
-      const MAX_CALLS = 4;
-      for (let i = 0; i < MAX_CALLS; i++){
-        const url = beforeTs
-          ? `https://www.okx.com/api/v5/market/history-candles?instId=${okxSym}&bar=1H&limit=300&before=${beforeTs}`
-          : `https://www.okx.com/api/v5/market/candles?instId=${okxSym}&bar=1H&limit=300`;
+      let oldestTs = null;
+
+      // Initial call: /candles for latest 300
+      try {
+        const r = await fetch(`https://www.okx.com/api/v5/market/candles?instId=${okxSym}&bar=1H&limit=300`, fetchOpts);
+        if (r.ok) {
+          const j = await r.json();
+          const arr = j?.data;
+          if (Array.isArray(arr) && arr.length > 0) {
+            // OKX returns newest-first: arr[0]=newest, arr[last]=oldest in this batch
+            const batch = arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
+            collected.push(...batch);
+            oldestTs = batch[batch.length - 1].t;
+          }
+        }
+      } catch(e){}
+
+      // Paginated history-candles with after=<oldestTs> (= older than ts). Max 100 per call.
+      const MAX_HIST_CALLS = 8; // 8 × 100 = 800 + initial 300 = 1100 bars max
+      for (let i = 0; i < MAX_HIST_CALLS && collected.length < limit + 100 && oldestTs; i++){
         try {
+          const url = `https://www.okx.com/api/v5/market/history-candles?instId=${okxSym}&bar=1H&after=${oldestTs}&limit=100`;
           const r = await fetch(url, fetchOpts);
           if (!r.ok) break;
           const j = await r.json();
           const arr = j?.data;
           if (!Array.isArray(arr) || arr.length === 0) break;
-          // OKX returns newest-first. Flatten to {t,c} preserving order.
           const batch = arr.map(k => ({ t: parseInt(k[0]), c: parseFloat(k[4]) }));
           collected.push(...batch);
-          // Para siguiente call: oldest timestamp del batch actual (last item porque newest-first)
-          beforeTs = batch[batch.length - 1].t;
-          if (batch.length < 300) break; // no hay m\u00e1s historial
-          if (collected.length >= limit) break; // ya tenemos suficiente
+          // Update oldestTs to oldest in this batch (last item, newest-first)
+          const newOldest = batch[batch.length - 1].t;
+          if (newOldest >= oldestTs) break; // no progress, avoid infinite loop
+          oldestTs = newOldest;
+          if (batch.length < 100) break; // no more history available
         } catch(e){ break; }
       }
+
       if (collected.length > 0){
-        // Sort oldest→newest, dedup por timestamp
         collected.sort((a, b) => a.t - b.t);
         const dedup = [];
         let lastT = -1;
@@ -738,7 +785,7 @@ async function fetchBars1h(symbol, limit = 800){
     }
   } catch(e){}
 
-  // 4. CryptoCompare (universal, limit hasta 2000 — formato V2 con .Data.Data nested)
+  // 5. CryptoCompare (universal, limit hasta 2000 — formato V2 con .Data.Data nested)
   try {
     if (symbol.endsWith('USDT')) {
       const ccBase = stripPrefix(symbol.slice(0, -4));
@@ -765,7 +812,7 @@ async function fetchBars1h(symbol, limit = 800){
     }
   } catch(e){}
 
-  // 5. Binance spot (puede 451)
+  // 6. Binance spot (puede 451)
   try {
     const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1h&limit=${Math.min(limit, 1000)}`, fetchOpts);
     if (r.ok) {
