@@ -1076,6 +1076,28 @@ app.get('/api/signals/active', async (req, res) => {
   }
 });
 
+// 2026-04-28: get recent signals (active + expired) — for Historial sync after Reset+Sync.
+// Public endpoint (no auth) since signals are global, not per-user.
+app.get('/api/signals/recent', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const sinceDays = Math.min(parseInt(req.query.days, 10) || 7, 30);
+    const sinceDate = new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000);
+    const { rows } = await pool.query(
+      `SELECT signal_id, symbol, direction, engine_version, entry, tp, sl, confidence,
+              ts, expires_at, state, state_changed_at, superseded_by, meta, created_at
+         FROM signals
+        WHERE ts >= $1
+        ORDER BY ts DESC
+        LIMIT $2`,
+      [sinceDate, limit]
+    );
+    res.json({ signals: rows, count: rows.length, serverTime: Date.now(), sinceDays });
+  } catch (err) {
+    res.status(500).json({ error: 'recent_failed', message: err.message });
+  }
+});
+
 // Get signal events since lastSeq — for WS gap fill via REST (fallback).
 app.get('/api/signals/events', async (req, res) => {
   try {

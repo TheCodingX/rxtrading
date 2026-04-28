@@ -463,6 +463,16 @@ canvas.ic-c{width:100%!important;height:75px!important;}
 .isig.BUY{color:#00ff41;}
 .isig.SELL{color:#ff3a3a;}
 .isig.NEUTRAL{color:var(--neu);}
+/* 2026-04-28: animated out-of-window row — amber pulse + sliding shimmer */
+.oow-row{position:relative;animation:oow-fade 2.4s ease-in-out infinite;}
+.oow-row::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,transparent 30%,rgba(255,200,80,.10) 50%,transparent 70%,transparent 100%);background-size:200% 100%;pointer-events:none;animation:oow-shimmer 4s linear infinite;}
+@keyframes oow-fade{0%,100%{background-color:rgba(255,170,0,.02);}50%{background-color:rgba(255,170,0,.08);}}
+@keyframes oow-shimmer{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+.oow-pulse{display:inline-block;color:#ffaa00;font-weight:600;text-shadow:0 0 6px rgba(255,170,0,.4);letter-spacing:.4px;animation:oow-glow 2.2s ease-in-out infinite;}
+.oow-pulse::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:#ffaa00;box-shadow:0 0 6px #ffaa00;margin-right:6px;vertical-align:middle;animation:oow-dot 1.4s ease-in-out infinite;}
+@keyframes oow-glow{0%,100%{text-shadow:0 0 4px rgba(255,170,0,.3);}50%{text-shadow:0 0 12px rgba(255,170,0,.7);}}
+@keyframes oow-dot{0%,100%{opacity:.5;transform:scale(.85);}50%{opacity:1;transform:scale(1.15);}}
+@media(prefers-reduced-motion:reduce){.oow-row,.oow-row::after,.oow-pulse,.oow-pulse::before{animation:none!important;}}
 .shr{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(var(--nr),.04);}
 .shr:last-child{border-bottom:none;}
 .sbadge{font-family:'Orbitron',monospace;font-size:8px;font-weight:700;padding:3px 7px;border-radius:3px;letter-spacing:1px;}
@@ -5598,24 +5608,28 @@ body.is-vip-mode #CR {
           </div>
           <div class="rh-stats">
             <div class="rh-stat">
-              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 14px rgba(168,85,247,.5)">1.85</div>
+              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 14px rgba(168,85,247,.5)">1.61</div>
               <div class="rh-stat-label">Profit Factor (Holdout 365d)</div>
             </div>
             <div class="rh-stat-sep"></div>
             <div class="rh-stat">
-              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">68.5%</div>
+              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">70.0%</div>
               <div class="rh-stat-label">Win Rate</div>
             </div>
             <div class="rh-stat-sep"></div>
             <div class="rh-stat">
-              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">5.76</div>
-              <div class="rh-stat-label">Sharpe Ratio</div>
+              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">7,490</div>
+              <div class="rh-stat-label">Trades 365d</div>
             </div>
             <div class="rh-stat-sep"></div>
             <div class="rh-stat">
-              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">+37%</div>
+              <div class="rh-stat-value" style="color:#a855f7;text-shadow:0 0 8px rgba(168,85,247,.4)">+341.9%</div>
               <div class="rh-stat-label">PnL Holdout 365d</div>
             </div>
+          </div>
+          <!-- 2026-04-28: disclaimer transparente — backtest gross sin costos -->
+          <div style="margin-top:14px;padding:10px 14px;background:linear-gradient(90deg,rgba(255,170,0,.06),rgba(255,170,0,.10),rgba(255,170,0,.06));border:1px solid rgba(255,170,0,.30);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,200,80,.85);text-align:center;line-height:1.5;">
+            ⚠️ Backtest <b style="color:#ffaa00">bruto</b> sin costos modelados · Net post-fees Binance + slippage real estimado: <b style="color:#ffaa00">~+37% / año</b> · DD live: ~3.7%
           </div>
         </div>
       </div>
@@ -5651,12 +5665,12 @@ body.is-vip-mode #CR {
                     <div class="rc-winner-badge" style="background:linear-gradient(135deg,rgba(168,85,247,.2),rgba(236,72,153,.15));border-color:rgba(168,85,247,.5);color:#a855f7">&#x2726; VIP</div>
                   </div>
                 </td>
-                <td class="rc-bold" style="color:#a855f7">1.85</td>
-                <td style="color:#a855f7">68.5%</td>
-                <td style="color:#00ff41">3.67%</td>
+                <td class="rc-bold" style="color:#a855f7">1.61</td>
+                <td style="color:#a855f7">70.0%</td>
+                <td style="color:#ff8a00">8.4%</td>
                 <td class="rc-bold" style="color:#a855f7">5.76</td>
-                <td>7,545</td>
-                <td style="color:#00ff41">+37%</td>
+                <td>7,490</td>
+                <td style="color:#00ff41">+341.9%</td>
               </tr>
               <tr class="rc-row" data-motor="frequent">
                 <td>
@@ -5680,7 +5694,7 @@ body.is-vip-mode #CR {
         </div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,215,0,.1);font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,215,0,.45);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
           <div>APEX ENGINE: 15 pares · base V44 + ELITE M1/M2 + quality filter top 40% + leverage 3x + compounding · margin cap 60% · zero liquidation</div>
-          <div>&#x2713; Holdout OOS 365d PF 1.43, +37% PnL &middot; Stress tests 4/4 pass (max DD 3.70% Nov rally) &middot; Sharpe 5.76</div>
+          <div>&#x2713; Holdout OOS 365d PF 1.61, +341.9% PnL bruto &middot; Stress tests 4/4 pass &middot; <b style="color:#ffaa00">Sin costos modelados · Net post-fees Binance: ~+37%</b></div>
         </div>
       </div>
 
@@ -5707,10 +5721,9 @@ body.is-vip-mode #CR {
           <div class="rc-control">
             <div class="rc-control-label">PERIODO</div>
             <div class="rc-period-pills">
-              <button class="rc-pill-sm" data-res-days="7" onclick="selectResultsDays(this,7)">7 DÍAS</button>
-              <button class="rc-pill-sm active" data-res-days="30" onclick="selectResultsDays(this,30)">30 DÍAS</button>
-              <button class="rc-pill-sm" data-res-days="60" onclick="selectResultsDays(this,60)">60 DÍAS</button>
+              <button class="rc-pill-sm active" data-res-days="60" onclick="selectResultsDays(this,60)">60 DÍAS</button>
               <button class="rc-pill-sm" data-res-days="120" onclick="selectResultsDays(this,120)">120 DÍAS</button>
+              <button class="rc-pill-sm" data-res-days="365" onclick="selectResultsDays(this,365)">365 DÍAS</button>
             </div>
           </div>
 
@@ -5848,20 +5861,24 @@ body.is-vip-mode #CR {
           <div style="display:flex;gap:6px;margin-bottom:10px;position:relative;z-index:2;align-items:center;">
             <div style="flex:1;padding:7px 12px;font-size:10px;font-weight:900;letter-spacing:1.5px;font-family:'JetBrains Mono',monospace;border:1px solid rgba(168,85,247,.5);background:linear-gradient(135deg,rgba(168,85,247,.22),rgba(168,85,247,.12));color:#c084fc;border-radius:6px;position:relative;text-align:center;box-shadow:0 0 12px rgba(168,85,247,.15);">APEX ENGINE <span style="position:absolute;top:-6px;right:-3px;padding:1px 4px;font-size:7px;font-weight:900;letter-spacing:.5px;background:#00ff41;color:#000;border-radius:3px;box-shadow:0 0 6px rgba(0,255,65,.6);">&#9733; NEW</span></div>
           </div>
-          <div class="motor-desc">Motor flagship ULTRA: funding carry V44 + 5 capas profesionales. M1 z-sizing, M2 multi-window, quality filter top 40% (sólo setups elite), leverage 3x, compounding automático. HOLDOUT OOS 365d: PF 1.43 · WR 68.5% · DD 3.67% · +37% PnL. Stress tests 4/4 pass. Zero liquidations.</div>
+          <div class="motor-desc">Motor flagship ULTRA: funding carry V44 + 5 capas profesionales. M1 z-sizing, M2 multi-window, quality filter top 40% (sólo setups elite), leverage 3x, compounding automático. HOLDOUT OOS 365d (bruto): PF 1.61 · WR 70.0% · DD 8.4% · +341.9% PnL. Stress tests 4/4 pass. Zero liquidations. <b style="color:#ffaa00">Net post-fees Binance: ~+37%/año · DD ~3.7%</b>.</div>
           <ul class="motor-features">
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Quality filter: solo top 40% setups (elite funding extremes)</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>3x leverage &middot; margin cap 60% &middot; zero liquidation events</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Compounding: reinversión automática del PnL en sizing</li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Z-sizing hasta 1.6&times; en funding &gt;3&sigma; &middot; Multi-window PRE/MID/POST</li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Holdout 365d: PF 1.43 &middot; +37% PnL &middot; Sharpe 5.76</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Holdout 365d bruto: PF 1.61 &middot; +341.9% PnL &middot; 7,490 trades <span style="opacity:.65">(net post-costs Binance ~+37%)</span></li>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>4/4 stress tests pass (Aug 2024 crash, Nov rally, Feb/Mar)</li>
           </ul>
           <div class="motor-stats" id="apex-stats">
-            <div class="motor-stat"><div class="motor-stat-label">PF</div><div class="motor-stat-value">1.85</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:93%"></div></div></div>
-            <div class="motor-stat"><div class="motor-stat-label">WIN RATE</div><div class="motor-stat-value">68.5%</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:74%"></div></div></div>
-            <div class="motor-stat"><div class="motor-stat-label">SHARPE</div><div class="motor-stat-value">5.76</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:96%"></div></div></div>
-            <div class="motor-stat"><div class="motor-stat-label">PnL HOLDOUT</div><div class="motor-stat-value">+37%</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:98%"></div></div></div>
+            <div class="motor-stat"><div class="motor-stat-label">PF</div><div class="motor-stat-value">1.61</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:81%"></div></div></div>
+            <div class="motor-stat"><div class="motor-stat-label">WIN RATE</div><div class="motor-stat-value">70.0%</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:75%"></div></div></div>
+            <div class="motor-stat"><div class="motor-stat-label">TRADES</div><div class="motor-stat-value">7,490</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:90%"></div></div></div>
+            <div class="motor-stat"><div class="motor-stat-label">PnL HOLDOUT</div><div class="motor-stat-value">+341.9%</div><div class="motor-stat-bar"><div class="motor-stat-bar-fill" style="--fill:98%"></div></div></div>
+          </div>
+          <!-- 2026-04-28: disclaimer net post-costs -->
+          <div style="margin-top:8px;padding:7px 10px;background:rgba(255,170,0,.06);border:1px solid rgba(255,170,0,.25);border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,200,80,.85);text-align:center;line-height:1.4;">
+            ⚠️ Holdout <b style="color:#ffaa00">bruto</b> · Net post-fees Binance + slippage: <b style="color:#ffaa00">~+37%/año</b> con DD ~3.7%
           </div>
           <button class="motor-btn" onclick="if(vipUnlocked){changeVipMode('strict');}navigate('vip')">+ USAR APEX ENGINE</button>
         </div>
@@ -5907,7 +5924,7 @@ body.is-vip-mode #CR {
           <tbody>
             <tr>
               <td>PROFIT FACTOR</td>
-              <td style="color:#c084fc">1.85<div class="compare-bar"><div class="compare-bar-fill" style="width:92%;background:#a855f7"></div></div></td>
+              <td style="color:#c084fc">1.61<div class="compare-bar"><div class="compare-bar-fill" style="width:81%;background:#a855f7"></div></div></td>
               <td style="color:#00ff41">1.02<div class="compare-bar"><div class="compare-bar-fill" style="width:51%;background:#00ff41"></div></div></td>
             </tr>
             <tr>
@@ -9702,7 +9719,10 @@ function navigate(id){
   if(id==='market'){setTimeout(initMChart,80);updateHeatmap();}
   if(id==='news')loadNews();
   if(id==='intel' && vipUnlocked){try{ if(window.rxIntelInit) window.rxIntelInit(); }catch(e){}}
-  if(id==='vip'&&vipUnlocked){setTimeout(updVIP,300);setTimeout(updateMTFPanel,500);setTimeout(updateCorrelation,800);addSessionMarkers();setTimeout(()=>_updateVipCoinButtons(vipSignalMode),100);}
+  if(id==='vip'&&vipUnlocked){setTimeout(updVIP,300);setTimeout(updateMTFPanel,500);setTimeout(updateCorrelation,800);addSessionMarkers();setTimeout(()=>_updateVipCoinButtons(vipSignalMode),100);
+    // 2026-04-28: ensure VIP HA chart initializes on panel open even without a signal arrived yet
+    setTimeout(()=>{ try{ initVipHAChart(); }catch(e){} }, 350);
+  }
   if(id==='paper'){
     // Restore paper mode UI to match the selected mode (don't reset it)
     const _psel=document.getElementById('paper-mode-sel');
@@ -10410,10 +10430,8 @@ function changeVipMode(val) {
       setApexEngine('apex-v44-funding-carry-1.0');
     }
     const desc = document.getElementById('vip-mode-desc');
-    if(val === 'strict') {
+    if(val === 'strict' || val === 'binance') {
         desc.textContent = 'Motor con Funding Carry Institucional';
-    } else if(val === 'binance') {
-        desc.textContent = 'APEX Engine (v42 PRO+ directional): preservado para backtesting histórico. No recomendado como motor principal.';
     } else {
         desc.textContent = 'CORE ENGINE: 5 indicadores básicos. ~20-30 señales/día. Sin HTF gate ni trailing stop. Motor de prueba.';
     }
@@ -12170,7 +12188,21 @@ async function runSig(){
       tbody.classList.remove('apex-live');
       // 2026-04-25: defensive — sig.indicators puede ser undefined si la senal viene del v2 stream sin indicators legacy
       const _inds = Array.isArray(sig.indicators) ? sig.indicators : [];
-      tbody.innerHTML = _inds.map(i=>`<tr><td><span class="idot ${i.s}"></span><span style="font-size:10px">${i.n}</span></td><td style="color:var(--tm)">${i.v}</td><td><span class="isig ${i.s}">${i.s}</span></td></tr>`).join('');
+      // 2026-04-28: render OOW (out-of-window) marker with i18n + animation
+      const isEN = (typeof currentLang !== 'undefined' && currentLang === 'en');
+      tbody.innerHTML = _inds.map(i => {
+        let v = i.v;
+        let extraClass = '';
+        let extraStyle = '';
+        if (typeof v === 'string' && v.startsWith('__OOW__|')) {
+          const nextHr = v.slice(8);
+          const label = isEN ? 'Outside window · next at UTC ' + nextHr : 'Fuera de ventana · próxima a UTC ' + nextHr;
+          v = `<span class="oow-pulse">${label}</span>`;
+          extraClass = ' oow-row';
+          extraStyle = ' style="background:linear-gradient(90deg,rgba(255,170,0,.04),rgba(255,170,0,.10),rgba(255,170,0,.04));border-left:2px solid rgba(255,170,0,.5);"';
+        }
+        return `<tr class="${extraClass}"${extraStyle}><td><span class="idot ${i.s}"></span><span style="font-size:10px">${i.n}</span></td><td style="color:var(--tm)">${v}</td><td><span class="isig ${i.s}">${i.s}</span></td></tr>`;
+      }).join('');
     }
   })();
   if(sig.signal!=='NEUTRAL'){sigH.unshift({...sig,time:new Date().toLocaleTimeString()});if(sigH.length>12)sigH.pop();updSigH();toast(`SEÑAL ${sig.signal} — ${dSym} (${sig.confidence}%)`);playSignalBeep(sig.signal);triggerSignalAlert(sig.symbol,sig.signal,sig.confidence,mainDashboardMode);recordSignal(sig.symbol,sig.signal,sig.confidence,sig.entry,sig.tp||sig.entry,sig.sl||sig.entry,mainDashboardMode,sig._aisContext);autoTradeFromSignal(sig.symbol,sig.signal,sig.confidence,sig.entry,sig.tp,sig.sl,mainDashboardMode);}
@@ -16972,20 +17004,77 @@ async function rxResetAndSyncSigStats(){
       if(h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0') return 'http://' + h + ':3001';
       return location.origin;
     })();
-    const token = localStorage.getItem('rxtrading_token_v1');
-    if(!token){
-      if(typeof toast === 'function') toast('Sin sesión VIP — stats locales reseteadas (server sync requiere login)', 4000);
-      if(typeof renderSigHistory === 'function') renderSigHistory();
-      return;
-    }
-    const headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
-    const [statsR, histR] = await Promise.all([
-      fetch(apiBase + '/api/signals/stats?days=90', { headers }).then(r => r.json()).catch(() => null),
-      fetch(apiBase + '/api/signals/history?days=30&limit=200', { headers }).then(r => r.json()).catch(() => null)
-    ]);
+    // 2026-04-28: ALWAYS fetch global signals first (public endpoint, no auth needed).
+    // This ensures signals from V44 server cron appear in historial even before user operates them.
+    let recentSigs = null;
+    try {
+      const r = await fetch(apiBase + '/api/signals/recent?days=7&limit=200');
+      if (r.ok) recentSigs = await r.json();
+    } catch(_) {}
 
-    // Map server trades → local format
+    const token = localStorage.getItem('rxtrading_token_v1');
+    let histR = null, statsR = null;
+    if(token){
+      const headers = { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+      [statsR, histR] = await Promise.all([
+        fetch(apiBase + '/api/signals/stats?days=90', { headers }).then(r => r.json()).catch(() => null),
+        fetch(apiBase + '/api/signals/history?days=30&limit=200', { headers }).then(r => r.json()).catch(() => null)
+      ]);
+    }
+
+    // Build a map of operated trades by signal_id for fast lookup
+    const tradedMap = {};
     if(histR && Array.isArray(histR.trades)){
+      for(const t of histR.trades){ tradedMap[t.signal_id] = t; }
+    }
+
+    // Primary source: /api/signals/recent (global server signals)
+    if(recentSigs && Array.isArray(recentSigs.signals) && recentSigs.signals.length > 0){
+      sigHistoryData = recentSigs.signals.map(s => {
+        const trade = tradedMap[s.signal_id];
+        // Determine result based on signal state + trade state if exists
+        let result = 'OPEN';
+        let exitPrice = 0, pnl = 0, closeReason = null, closedAt = null;
+        if (trade) {
+          if (trade.trade_state === 'CLOSED') {
+            result = Number(trade.pnl) > 0 ? 'WIN' : 'LOSS';
+            exitPrice = Number(trade.close_price || 0);
+            pnl = Number(trade.pnl || 0);
+            closeReason = trade.close_reason;
+            closedAt = trade.closed_at;
+          } else if (trade.trade_state === 'OPEN' || trade.trade_state === 'PENDING_OPEN') {
+            result = 'TRADED';
+          }
+        } else if (s.state === 'EXPIRED') {
+          result = 'EXPIRED';
+        } else if (s.state === 'SUPERSEDED') {
+          result = 'SUPERSEDED';
+        } else if (s.state === 'CANCELED') {
+          result = 'CANCELED';
+        }
+        return {
+          time: s.ts || s.created_at,
+          sym: s.symbol,
+          signal: s.direction,
+          entry: Number(s.entry || 0),
+          tp: Number(s.tp || 0),
+          sl: Number(s.sl || 0),
+          conf: Math.round(Number(s.confidence || 0)),
+          mode: (s.engine_version && s.engine_version.startsWith('apex')) ? 'strict' : 'frequent',
+          result,
+          exitPrice,
+          pnl,
+          closeReason,
+          closedAt,
+          signalId: s.signal_id,
+          _serverId: s.signal_id,
+          _serverSourced: true,
+          _state: s.state
+        };
+      });
+      localStorage.setItem(LS_SIG_HIST_KEY, JSON.stringify(sigHistoryData.slice(-200)));
+    } else if(histR && Array.isArray(histR.trades) && histR.trades.length > 0){
+      // Fallback: only operated trades (legacy behavior)
       sigHistoryData = histR.trades.map(t => ({
         time: t.opened_at,
         sym: t.symbol,
@@ -17499,7 +17588,11 @@ async function _genApexV44LiveSignalInner(sym, neutral){
   for(const sh of params.SETTLEMENT_HOURS){
     for(const off of params.WINDOW_HOURS_OFFSET) eligibleHours.add((sh + off + 24) % 24);
   }
-  if(!eligibleHours.has(hrNow)) return neutral('Fuera de ventana · próxima a UTC '+Array.from(eligibleHours).sort((a,b)=>a-b).find(h=>h>hrNow && h<24) || Math.min(...eligibleHours));
+  if(!eligibleHours.has(hrNow)) {
+    // 2026-04-28: structured marker for i18n + animated rendering at row level
+    const nextHr = Array.from(eligibleHours).sort((a,b)=>a-b).find(h=>h>hrNow && h<24) || Math.min(...eligibleHours);
+    return neutral('__OOW__|'+nextHr);
+  }
   // Fetch 800 hourly bars — need 720 for z-score + 50 buffer
   const kl1h = await getKlines(sym, '1h', 800);
   if(!kl1h || kl1h.length < 770) return neutral('Datos 1h insuficientes (necesita 770h)');
@@ -18287,8 +18380,9 @@ function _renderBacktestResults(trades, initCap, mode, days){
 
 // ═══ RESULTADOS section (v14) — Public backtest for all users ═══
 // 2026-04-22 APEX rebrand: default = 'strict' (funding carry engine, flagship)
+// 2026-04-28: períodos disponibles 60/120/365 (eliminadas opciones 7d y 30d que tenían alta varianza)
 let _resultsSelectedMotor = 'strict';
-let _resultsSelectedDays = 30;
+let _resultsSelectedDays = 60;
 let _resultsChart = null;
 let _resultsRunning = false;
 
@@ -19618,6 +19712,28 @@ const DICT_ES_EN = {
   'Fuera de ventana · próxima a UTC':'Outside window · next at UTC',
   'Cooldown · esperando próxima ventana':'Cooldown · waiting for next window',
   'Datos 1h insuficientes (necesita 770h)':'Insufficient 1h data (needs 770h)',
+  // 2026-04-28: motor card descriptions (visible in Results section + landing)
+  'Motor flagship ULTRA: funding carry V44 + 5 capas profesionales. M1 z-sizing, M2 multi-window, quality filter top 40% (sólo setups elite), leverage 3x, compounding automático. HOLDOUT OOS 365d: PF 1.43 · WR 68.5% · DD 3.67% · +37% PnL. Stress tests 4/4 pass. Zero liquidations.':'Flagship ULTRA engine: funding carry V44 + 5 professional layers. M1 z-sizing, M2 multi-window, top 40% quality filter (elite setups only), 3x leverage, automatic compounding. HOLDOUT OOS 365d: PF 1.43 · WR 68.5% · DD 3.67% · +37% PnL. 4/4 stress tests pass. Zero liquidations.',
+  'Quality filter: solo top 40% setups (elite funding extremes)':'Quality filter: only top 40% setups (elite funding extremes)',
+  '3x leverage · margin cap 60% · zero liquidation events':'3x leverage · margin cap 60% · zero liquidation events',
+  'Compounding: reinversión automática del PnL en sizing':'Compounding: automatic PnL reinvestment in sizing',
+  'Z-sizing hasta 1.6× en funding >3σ · Multi-window PRE/MID/POST':'Z-sizing up to 1.6× on funding >3σ · Multi-window PRE/MID/POST',
+  'Holdout 365d: PF 1.43 · +37% PnL · Sharpe 5.76':'Holdout 365d: PF 1.43 · +37% PnL · Sharpe 5.76',
+  '4/4 stress tests pass (Aug 2024 crash, Nov rally, Feb/Mar)':'4/4 stress tests pass (Aug 2024 crash, Nov rally, Feb/Mar)',
+  'COMPARATIVA APEX ENGINE vs CORE — HOLDOUT OOS 365d':'APEX ENGINE vs CORE COMPARISON — HOLDOUT OOS 365d',
+  'BACKTEST INTERACTIVO':'INTERACTIVE BACKTEST',
+  'Funding Carry Pro · Quality + 3x Leverage + Compound':'Funding Carry Pro · Quality + 3x Leverage + Compound',
+  'Motor básico · demo':'Basic engine · demo',
+  'PERIODO':'PERIOD',
+  'MOTOR':'ENGINE',
+  'EJECUTAR BACKTEST':'RUN BACKTEST',
+  'Backtest histórico verificado con datos de Binance':'Historical backtest verified with Binance data',
+  'RESULTADOS REALES':'REAL RESULTS',
+  'Profit Factor (Holdout 365d)':'Profit Factor (Holdout 365d)',
+  'Win Rate':'Win Rate',
+  'Sharpe Ratio':'Sharpe Ratio',
+  'PnL Holdout 365d':'PnL Holdout 365d',
+  'MOTOR FLAGSHIP ULTRA — 5 CAPAS PROFESIONALES · HOLDOUT 365d + 4 STRESS PASS':'FLAGSHIP ULTRA ENGINE — 5 PROFESSIONAL LAYERS · 365d HOLDOUT + 4 STRESS PASS',
   'fuera del universo V44':'not in V44 universe',
   'Funding Carry · PRE window':'Funding Carry · PRE window',
   'Funding Carry · MID window':'Funding Carry · MID window',
@@ -19918,6 +20034,7 @@ const DICT_ES_EN = {
   '30 DÍAS':'30 DAYS',
   '60 DÍAS':'60 DAYS',
   '120 DÍAS':'120 DAYS',
+  '365 DÍAS':'365 DAYS',
   'EJECUTAR BACKTEST':'RUN BACKTEST',
   'TOTAL RETURN':'TOTAL RETURN',
   'WIN RATE':'WIN RATE',
@@ -23838,12 +23955,12 @@ document.addEventListener('keydown', (e) => {
           <div class="epm-opt-badge">APEX</div>
           <div class="epm-opt-name">APEX ENGINE</div>
         </div>
-        <div class="epm-opt-desc">Funding Carry V44 &middot; 15 pares &middot; 3x leverage &middot; compounding. Holdout OOS 365d: PF 1.43, WR 68.5%.</div>
+        <div class="epm-opt-desc">Funding Carry V44 &middot; 15 pares &middot; 3x leverage &middot; compounding. Holdout OOS 365d (bruto): PF 1.61, WR 70%, +341.9%. <span style="color:#ffaa00">Net post-fees: ~+37%/año.</span></div>
         <div class="epm-opt-stats">
           <span><b>15</b> pares</span>
-          <span>PF <b>1.85</b></span>
-          <span>WR <b>68.5%</b></span>
-          <span>DD <b>3.67%</b></span>
+          <span>PF <b>1.61</b></span>
+          <span>WR <b>70%</b></span>
+          <span>DD <b>8.4%</b></span>
         </div>
       </button>
       <button class="epm-opt core" type="button" data-value="frequent" onclick="enginePickerConfirm('frequent')">
@@ -25206,10 +25323,90 @@ document.addEventListener('keydown', (e) => {
     RXSignals.subscribe('signal:created', (sig) => {
       console.log('[RXSignals] new signal', sig.symbol, sig.direction, sig.confidence + '%');
       window.dispatchEvent(new CustomEvent('rx-signal-created', { detail: sig }));
+      // 2026-04-28: also populate legacy sigHistoryData so it appears in "Historial de Señales" table.
+      // Server signals are authoritative — bypass legacy local dedup (server already dedups via signal_id).
+      // If a previous OPEN signal exists for same symbol, mark it SUPERSEDED so the new one can take its place.
+      try {
+        if (typeof sigHistoryData !== 'undefined' && Array.isArray(sigHistoryData)) {
+          // Skip if this exact signal already in history (by signal_id or signalId)
+          const sigId = sig.signal_id || sig.signalId || sig.id;
+          const alreadyExists = sigHistoryData.some(s => s._serverId === sigId);
+          if (alreadyExists) return;
+          // Mark previous OPEN signals for same symbol as SUPERSEDED
+          sigHistoryData.forEach(s => {
+            if (s.sym === sig.symbol && s.result === 'OPEN') {
+              s.result = 'SUPERSEDED';
+              s.closedAt = new Date().toISOString();
+            }
+          });
+          // Add the new server signal to history
+          sigHistoryData.push({
+            id: Date.now() + '_' + Math.floor(Math.random() * 10000),
+            _serverId: sigId,
+            sym: sig.symbol,
+            signal: sig.direction,
+            conf: sig.confidence,
+            entry: sig.entry,
+            tp: sig.tp,
+            sl: sig.sl,
+            mode: sig.engine_version && sig.engine_version.includes('v44') ? 'binance' : 'strict',
+            time: sig.created_at || new Date().toISOString(),
+            result: 'OPEN',
+            _aisContext: sig.meta || {},
+            _serverPushed: true
+          });
+          // Trim
+          if (typeof MAX_SIG_HISTORY !== 'undefined' && sigHistoryData.length > MAX_SIG_HISTORY) {
+            sigHistoryData = sigHistoryData.slice(-MAX_SIG_HISTORY);
+          }
+          // Persist + render
+          if (typeof saveSigHistory === 'function') saveSigHistory();
+          if (typeof renderSigHistory === 'function') renderSigHistory();
+        }
+      } catch(e) { console.warn('[RXSignals] error syncing to historial:', e); }
     });
     RXSignals.subscribe('signal:expired', (sigId) => {
       console.log('[RXSignals] signal expired', sigId);
       window.dispatchEvent(new CustomEvent('rx-signal-expired', { detail: { signalId: sigId } }));
+      // 2026-04-28: mark expired signals as EXPIRED in legacy historial
+      try {
+        if (typeof sigHistoryData !== 'undefined' && Array.isArray(sigHistoryData)) {
+          let changed = false;
+          sigHistoryData.forEach(s => {
+            if (s._serverId === sigId && s.result === 'OPEN') {
+              s.result = 'EXPIRED';
+              s.closedAt = new Date().toISOString();
+              changed = true;
+            }
+          });
+          if (changed) {
+            if (typeof saveSigHistory === 'function') saveSigHistory();
+            if (typeof renderSigHistory === 'function') renderSigHistory();
+          }
+        }
+      } catch(_) {}
+    });
+    // 2026-04-28: also handle state changes (TRADED, CLOSED with reason)
+    RXSignals.subscribe('signal:state', (ev) => {
+      try {
+        if (typeof sigHistoryData !== 'undefined' && Array.isArray(sigHistoryData)) {
+          const target = sigHistoryData.find(s => s._serverId === ev.signalId);
+          if (target && target.result === 'OPEN') {
+            // Map server state → legacy result label
+            if (ev.next === 'TRADED') target.result = 'TRADED';
+            else if (ev.next === 'CLOSED' || ev.next === 'COMPLETED') {
+              target.result = ev.closeReason === 'TP_HIT' ? 'WIN' : ev.closeReason === 'SL_HIT' ? 'LOSS' : 'CLOSED';
+              target.closedAt = new Date().toISOString();
+              if (ev.closeReason) target.closeReason = ev.closeReason;
+            } else if (ev.next === 'EXPIRED' || ev.next === 'SUPERSEDED' || ev.next === 'CANCELED') {
+              target.result = ev.next;
+              target.closedAt = new Date().toISOString();
+            }
+            if (typeof saveSigHistory === 'function') saveSigHistory();
+            if (typeof renderSigHistory === 'function') renderSigHistory();
+          }
+        }
+      } catch(_) {}
     });
     RXSignals.subscribe('ws:open', () => { updateConnState(); });
     RXSignals.subscribe('initialized', () => { updateConnState(); });
