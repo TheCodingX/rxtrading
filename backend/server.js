@@ -1286,6 +1286,36 @@ app.get('/api/signals/stats', verifyToken, async (req, res) => {
 
 // User's signal history (closed trades) for table display.
 // Replaces localStorage `rxtrading_sighist_v70` which can be corrupted.
+// 2026-04-29 — Recent signals endpoint with outcomes (public, no auth)
+// Used by frontend Historial tab to show all server-generated signals + WIN/LOSS/NO_HIT/PENDING
+app.get('/api/signals/recent', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const sinceHours = Math.min(parseInt(req.query.hours, 10) || 48, 720);
+    const sinceDate = new Date(Date.now() - sinceHours * 60 * 60 * 1000);
+    const engineVersion = req.query.engine || null;
+    const params = [sinceDate];
+    let where = 'ts >= $1';
+    if (engineVersion) {
+      params.push(engineVersion);
+      where += ` AND engine_version = $${params.length}`;
+    }
+    params.push(limit);
+    const sql = `
+      SELECT signal_id, symbol, direction, engine_version, entry, tp, sl,
+             confidence, ts, expires_at, state, outcome, outcome_price, closed_at, meta
+        FROM signals
+       WHERE ${where}
+       ORDER BY ts DESC
+       LIMIT $${params.length}`;
+    const { rows } = await pool.query(sql, params);
+    res.json({ signals: rows, count: rows.length, serverTime: Date.now() });
+  } catch (err) {
+    console.error('[/api/signals/recent]', err.message);
+    res.status(500).json({ error: 'recent_failed', message: err.message });
+  }
+});
+
 app.get('/api/signals/history', verifyToken, async (req, res) => {
   try {
     const keyId = req.license.keyId;
@@ -3298,6 +3328,7 @@ async function start() {
         signalGenerator.start({ onNewSignal: wsServer.onNewSignal });
         signalCron.start({
           onSignalExpired: wsServer.onSignalExpired,
+          onSignalClosed: wsServer.onSignalClosed, // 2026-04-29: TP/SL hits broadcast outcome
           onReconcileDivergence: wsServer.onReconcileDivergence
         });
         console.log('[Startup] Signal System v2 active (DB-backed + WS + crons)');

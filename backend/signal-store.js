@@ -87,6 +87,18 @@ async function insertSignal({
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // 2026-04-29 ANTI-SPAM: skip if ACTIVE signal already exists for (symbol, direction, engine_version)
+    // No supersede — keep the FIRST signal until it closes/expires. Eliminates spam in historial.
+    const existing = await client.query(
+      `SELECT signal_id FROM signals
+        WHERE symbol = $1 AND direction = $2 AND engine_version = $3 AND state = 'ACTIVE'
+        LIMIT 1`,
+      [symbol, direction, engineVersion]
+    );
+    if (existing.rows.length > 0) {
+      await client.query('COMMIT');
+      return { created: false, signal: null, reason: 'active_already_exists', existingId: existing.rows[0].signal_id };
+    }
     // Insert with ON CONFLICT DO NOTHING to handle race
     const insertSql = `
       INSERT INTO signals (
@@ -102,7 +114,7 @@ async function insertSignal({
     ]);
     if (rows.length === 0) {
       await client.query('COMMIT');
-      return { created: false, signal: null };
+      return { created: false, signal: null, reason: 'duplicate_bucket' };
     }
     const signal = rows[0];
     // Emit creation event
@@ -111,27 +123,6 @@ async function insertSignal({
        VALUES ($1, 'created', NULL, 'ACTIVE', $2)`,
       [signalId, JSON.stringify({ confidence, entry, tp, sl })]
     );
-    // Supersede older active signal for same (symbol, direction, engine_version)
-    const supersedeSql = `
-      UPDATE signals
-         SET state = 'SUPERSEDED',
-             state_changed_at = NOW(),
-             superseded_by = $1
-       WHERE symbol = $2
-         AND direction = $3
-         AND engine_version = $4
-         AND state = 'ACTIVE'
-         AND id != $5
-       RETURNING signal_id
-    `;
-    const supRes = await client.query(supersedeSql, [signal.id, symbol, direction, engineVersion, signal.id]);
-    for (const row of supRes.rows) {
-      await client.query(
-        `INSERT INTO signal_events (signal_id, event_type, prev_state, new_state, meta)
-         VALUES ($1, 'superseded', 'ACTIVE', 'SUPERSEDED', $2)`,
-        [row.signal_id, JSON.stringify({ superseded_by: signalId })]
-      );
-    }
     await client.query('COMMIT');
     return { created: true, signal };
   } catch (err) {
@@ -140,6 +131,89 @@ async function insertSignal({
   } finally {
     client.release();
   }
+}
+
+/**
+ * 2026-04-29 — Close a signal with outcome (WIN/LOSS/NO_HIT).
+ * Used by TP/SL monitor and expiration cron.
+ * Sets state to EXPIRED and records outcome + exit price.
+ */
+async function closeSignalWithOutcome({ signalId, outcome, exitPrice, reason }) {
+  const validOutcomes = ['WIN', 'LOSS', 'NO_HIT'];
+  if (!validOutcomes.includes(outcome)) {
+    return { ok: false, reason: 'invalid_outcome' };
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const lockRes = await client.query(
+      'SELECT * FROM signals WHERE signal_id = $1 AND state = $2 FOR UPDATE',
+      [signalId, 'ACTIVE']
+    );
+    if (lockRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { ok: false, reason: 'not_active_or_not_found' };
+    }
+    const upd = await client.query(
+      `UPDATE signals
+          SET state = 'EXPIRED',
+              outcome = $1,
+              outcome_price = $2,
+              closed_at = NOW(),
+              state_changed_at = NOW()
+        WHERE signal_id = $3
+        RETURNING *`,
+      [outcome, exitPrice, signalId]
+    );
+    await client.query(
+      `INSERT INTO signal_events (signal_id, event_type, prev_state, new_state, meta)
+       VALUES ($1, 'expired', 'ACTIVE', 'EXPIRED', $2)`,
+      [signalId, JSON.stringify({ outcome, exitPrice, reason })]
+    );
+    await client.query('COMMIT');
+    return { ok: true, signal: upd.rows[0] };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    return { ok: false, reason: 'error', error: err.message };
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * 2026-04-29 — Monitor open signals for TP/SL hits given current prices.
+ * @param {Object} currentPrices - { 'BTCUSDT': 76500, 'ETHUSDT': 2300, ... }
+ * @returns {Array} of { signalId, outcome, exitPrice, reason }
+ */
+async function monitorOpenSignals(currentPrices) {
+  if (!currentPrices || typeof currentPrices !== 'object') return [];
+  const { rows: openSigs } = await pool.query(
+    `SELECT signal_id, symbol, direction, entry, tp, sl, expires_at
+       FROM signals
+      WHERE state = 'ACTIVE' AND expires_at > NOW()`
+  );
+  const closed = [];
+  for (const sig of openSigs) {
+    const price = currentPrices[sig.symbol];
+    if (price == null || !isFinite(price)) continue;
+    const tp = parseFloat(sig.tp);
+    const sl = parseFloat(sig.sl);
+    let outcome = null;
+    let exitPrice = null;
+    let reason = null;
+    if (sig.direction === 'BUY') {
+      if (price >= tp) { outcome = 'WIN'; exitPrice = tp; reason = 'TP_HIT'; }
+      else if (price <= sl) { outcome = 'LOSS'; exitPrice = sl; reason = 'SL_HIT'; }
+    } else { // SELL
+      if (price <= tp) { outcome = 'WIN'; exitPrice = tp; reason = 'TP_HIT'; }
+      else if (price >= sl) { outcome = 'LOSS'; exitPrice = sl; reason = 'SL_HIT'; }
+    }
+    if (outcome) {
+      const res = await closeSignalWithOutcome({ signalId: sig.signal_id, outcome, exitPrice, reason });
+      if (res.ok) closed.push({ signalId: sig.signal_id, outcome, exitPrice, reason, symbol: sig.symbol });
+    }
+  }
+  return closed;
 }
 
 /**
@@ -228,17 +302,21 @@ async function expireStale() {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // 2026-04-29: mark outcome=NO_HIT on TTL expiration (signal didn't hit TP nor SL within window)
     const upd = await client.query(`
       UPDATE signals
-         SET state = 'EXPIRED', state_changed_at = NOW()
+         SET state = 'EXPIRED',
+             state_changed_at = NOW(),
+             outcome = COALESCE(outcome, 'NO_HIT'),
+             closed_at = COALESCE(closed_at, NOW())
        WHERE state = 'ACTIVE' AND expires_at <= NOW()
        RETURNING signal_id
     `);
     for (const row of upd.rows) {
       await client.query(
         `INSERT INTO signal_events (signal_id, event_type, prev_state, new_state, meta)
-         VALUES ($1, 'expired', 'ACTIVE', 'EXPIRED', '{}')`,
-        [row.signal_id]
+         VALUES ($1, 'expired', 'ACTIVE', 'EXPIRED', $2)`,
+        [row.signal_id, JSON.stringify({ outcome: 'NO_HIT', reason: 'TTL_EXPIRED' })]
       );
     }
     await client.query('COMMIT');
@@ -391,6 +469,8 @@ module.exports = {
   openTradeForSignal,
   closeTrade,
   getActiveTradesForUser,
+  closeSignalWithOutcome,
+  monitorOpenSignals,
   VALID_STATES,
   VALID_TRANSITIONS
 };

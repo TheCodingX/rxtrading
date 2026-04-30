@@ -201,6 +201,25 @@ async function initDB() {
     `CREATE INDEX IF NOT EXISTS idx_signals_signalid ON signals(signal_id)`,
     `CREATE INDEX IF NOT EXISTS idx_signals_engine_ts ON signals(engine_version, ts DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_signals_symbol_state ON signals(symbol, state)`,
+    // 2026-04-29 — outcome tracking on signals (WIN/LOSS/NO_HIT) for signal-level historial
+    `ALTER TABLE signals ADD COLUMN IF NOT EXISTS outcome TEXT DEFAULT NULL`,
+    `ALTER TABLE signals ADD COLUMN IF NOT EXISTS outcome_price NUMERIC(20,8) DEFAULT NULL`,
+    `ALTER TABLE signals ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ DEFAULT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_signals_outcome ON signals(outcome) WHERE outcome IS NOT NULL`,
+    // 2026-04-29 — one-time cleanup: consolidate duplicate ACTIVE signals from pre-fix accumulation
+    // Keeps the newest ACTIVE per (symbol, direction, engine_version), marks older as SUPERSEDED.
+    // Idempotent: re-runs on every boot harmlessly (only affects rows that violate the new dedup rule).
+    `WITH ranked AS (
+      SELECT id, signal_id,
+        ROW_NUMBER() OVER (PARTITION BY symbol, direction, engine_version
+                           ORDER BY ts DESC, id DESC) AS rn
+      FROM signals WHERE state = 'ACTIVE'
+    )
+    UPDATE signals
+    SET state = 'SUPERSEDED',
+        state_changed_at = NOW(),
+        closed_at = COALESCE(closed_at, NOW())
+    WHERE id IN (SELECT id FROM ranked WHERE rn > 1)`,
 
     // signal_events: audit log + WS sequence delivery (clients track lastSeq, request gap fill on reconnect)
     `CREATE TABLE IF NOT EXISTS signal_events (

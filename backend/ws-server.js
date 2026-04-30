@@ -285,6 +285,30 @@ async function onSignalExpired(signalId) {
 }
 
 /**
+ * 2026-04-29 — Hook called by TP/SL monitor cron when signal closes with outcome WIN/LOSS.
+ * Broadcasts to all connected clients so frontend can update historial in real-time.
+ */
+async function onSignalClosed({ signalId, outcome, exitPrice, reason, symbol }) {
+  try {
+    const { rows } = await require('./database').pool.query(
+      "SELECT sequence_number FROM signal_events WHERE signal_id = $1 ORDER BY sequence_number DESC LIMIT 1",
+      [signalId]
+    );
+    const seq = rows[0] ? parseInt(rows[0].sequence_number, 10) : null;
+    broadcastEvent({
+      sequenceNumber: seq,
+      event_type: 'expired',
+      signal_id: signalId,
+      prev_state: 'ACTIVE',
+      new_state: 'EXPIRED',
+      meta: { outcome, exitPrice, reason, symbol }
+    });
+  } catch (err) {
+    console.warn('[WS] onSignalClosed err:', err.message);
+  }
+}
+
+/**
  * Hook called by reconciliation cron on divergence detection.
  * Persists a CRITICAL notification for the user.
  */
@@ -312,5 +336,6 @@ module.exports = {
   pushNotification,
   onNewSignal,
   onSignalExpired,
+  onSignalClosed,
   onReconcileDivergence
 };

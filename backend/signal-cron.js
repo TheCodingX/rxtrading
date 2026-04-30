@@ -17,10 +17,13 @@ const sigStore = require('./signal-store');
 
 const EXPIRATION_INTERVAL_MS = parseInt(process.env.SIGNAL_EXPIRE_INTERVAL_MS || '60000', 10); // 60s
 const RECONCILE_INTERVAL_MS = parseInt(process.env.SIGNAL_RECONCILE_INTERVAL_MS || '300000', 10); // 5min
+const TPSL_MONITOR_INTERVAL_MS = parseInt(process.env.SIGNAL_TPSL_INTERVAL_MS || '30000', 10); // 30s
 
 let _expireTimer = null;
 let _reconcileTimer = null;
+let _tpslTimer = null;
 let _onSignalExpiredCb = null;
+let _onSignalClosedCb = null;
 let _onReconcileDivergence = null;
 
 /**
@@ -131,8 +134,52 @@ async function runReconcileCycle() {
   }
 }
 
-function start({ onSignalExpired, onReconcileDivergence } = {}) {
+/**
+ * 2026-04-29 — TP/SL monitor: every 30s, fetch current price for each ACTIVE signal symbol,
+ * check if TP or SL has been hit, mark outcome (WIN/LOSS) and close signal.
+ *
+ * Uses v44-engine.fetchBars1h to get latest 1h bar's close price (cached, ~instant after warmup).
+ */
+async function runTpslMonitorCycle() {
+  try {
+    // Get unique symbols with ACTIVE signals
+    const { rows: openSyms } = await pool.query(
+      `SELECT DISTINCT symbol FROM signals WHERE state = 'ACTIVE' AND expires_at > NOW()`
+    );
+    if (openSyms.length === 0) return { monitored: 0, closed: 0 };
+    // Fetch current prices via v44-engine (uses bars cache, ~instant)
+    let v44;
+    try { v44 = require('./v44-engine'); } catch (_) { return { skipped: 'no_v44' }; }
+    const currentPrices = {};
+    for (const r of openSyms) {
+      try {
+        const bars = await v44.fetchBars1h(r.symbol, 800);
+        if (bars && bars.length > 0) {
+          // Use latest bar's close as current price proxy
+          currentPrices[r.symbol] = parseFloat(bars[bars.length - 1].c);
+        }
+      } catch (_) {}
+    }
+    const closed = await sigStore.monitorOpenSignals(currentPrices);
+    if (closed.length > 0) {
+      console.log('[SignalCron][TPSL] closed', closed.length, 'signals:',
+        closed.map(c => `${c.symbol}=${c.outcome}/${c.reason}`).join(', '));
+      if (_onSignalClosedCb) {
+        for (const c of closed) {
+          try { await _onSignalClosedCb(c); } catch (_) {}
+        }
+      }
+    }
+    return { monitored: openSyms.length, closed: closed.length, details: closed };
+  } catch (err) {
+    console.error('[SignalCron][TPSL] error:', err.message);
+    return { error: err.message };
+  }
+}
+
+function start({ onSignalExpired, onSignalClosed, onReconcileDivergence } = {}) {
   if (onSignalExpired) _onSignalExpiredCb = onSignalExpired;
+  if (onSignalClosed) _onSignalClosedCb = onSignalClosed;
   if (onReconcileDivergence) _onReconcileDivergence = onReconcileDivergence;
   if (!_expireTimer) {
     setTimeout(() => runExpirationCycle().catch(e => console.warn(e.message)), 8000);
@@ -148,18 +195,28 @@ function start({ onSignalExpired, onReconcileDivergence } = {}) {
     }, RECONCILE_INTERVAL_MS);
     console.log('[SignalCron] reconciliation job started — every', RECONCILE_INTERVAL_MS, 'ms');
   }
+  if (!_tpslTimer) {
+    setTimeout(() => runTpslMonitorCycle().catch(e => console.warn(e.message)), 15000);
+    _tpslTimer = setInterval(() => {
+      runTpslMonitorCycle().catch(e => console.warn(e.message));
+    }, TPSL_MONITOR_INTERVAL_MS);
+    console.log('[SignalCron] TP/SL monitor started — every', TPSL_MONITOR_INTERVAL_MS, 'ms');
+  }
 }
 
 function stop() {
   if (_expireTimer) { clearInterval(_expireTimer); _expireTimer = null; }
   if (_reconcileTimer) { clearInterval(_reconcileTimer); _reconcileTimer = null; }
+  if (_tpslTimer) { clearInterval(_tpslTimer); _tpslTimer = null; }
 }
 
 module.exports = {
   EXPIRATION_INTERVAL_MS,
   RECONCILE_INTERVAL_MS,
+  TPSL_MONITOR_INTERVAL_MS,
   runExpirationCycle,
   runReconcileCycle,
+  runTpslMonitorCycle,
   start,
   stop
 };

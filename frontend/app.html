@@ -4059,20 +4059,6 @@ body.is-vip-mode #CR {
             </div>
           </div>
 
-          <!-- PROMO: Autotrading Real -->
-          <div style="margin:20px 0 8px;padding:16px 18px;border-radius:12px;background:linear-gradient(135deg,rgba(255,215,0,.1),rgba(255,140,0,.03));border:1px solid rgba(255,215,0,.35);position:relative;overflow:hidden;">
-            <div style="position:absolute;top:0;right:0;padding:3px 10px;background:linear-gradient(135deg,#FFD700,#FF8C00);color:#000;font-family:'Orbitron',monospace;font-size:8px;font-weight:900;letter-spacing:1.5px;border-bottom-left-radius:10px;">NUEVO</div>
-            <div style="display:flex;align-items:center;gap:12px;text-align:left;">
-              <div style="flex-shrink:0;width:42px;height:42px;border-radius:11px;background:linear-gradient(135deg,rgba(255,215,0,.25),rgba(255,140,0,.1));border:1px solid rgba(255,215,0,.5);display:flex;align-items:center;justify-content:center;box-shadow:0 0 20px rgba(255,215,0,.2);">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFD700" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-              </div>
-              <div style="flex:1;">
-                <div style="font-family:'Orbitron',monospace;font-size:10px;font-weight:900;color:#FFD700;letter-spacing:1.2px;text-shadow:0 0 10px rgba(255,215,0,.5);">AUTOTRADING REAL EN BINANCE</div>
-                <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,215,0,.7);margin-top:3px;line-height:1.5;">Conectá tu cuenta y las señales se ejecutan solas con TP/SL exactos. Sin copiar, sin delay.</div>
-              </div>
-            </div>
-          </div>
-
           <!-- LIVE SIGNAL DEMO -->
           <div style="margin:24px 0 16px;padding:12px;border-radius:12px;background:linear-gradient(135deg,rgba(255,215,0,.04),rgba(255,140,0,.02));border:1px solid rgba(255,215,0,.2);position:relative;overflow:visible;">
             <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--g),transparent);animation:goldLine 2.5s ease-in-out infinite;"></div>
@@ -4100,8 +4086,9 @@ body.is-vip-mode #CR {
           <!-- VIP STATS BAR -->
           <div style="display:flex;justify-content:center;gap:24px;margin:16px 0;flex-wrap:wrap;">
             <div class="vgate-apex-pnl-box" style="text-align:center;padding:14px 20px;border-radius:12px;background:linear-gradient(135deg,rgba(255,215,0,.1),rgba(255,140,0,.04));border:1px solid rgba(255,215,0,.4);min-width:110px;position:relative;overflow:hidden;box-shadow:0 0 22px rgba(255,215,0,.18),inset 0 0 16px rgba(255,215,0,.05);animation:vgateApexFloat 4s ease-in-out infinite;">
-              <div id="vgate-wr-val" style="font-family:'Orbitron',monospace;font-size:24px;font-weight:900;background:linear-gradient(135deg,#ffd700 0%,#ffed4e 50%,#ff8c00 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 14px rgba(255,215,0,.6));animation:vgateApexPulse 2.5s ease-in-out infinite;letter-spacing:-.5px;">+37%</div>
-              <div style="font-size:8px;color:rgba(255,215,0,.85);letter-spacing:1.3px;font-family:'JetBrains Mono',monospace;font-weight:700;text-shadow:0 0 6px rgba(255,215,0,.3);">APEX PnL 365d <span style="display:inline-block;width:5px;height:5px;background:#ffd700;border-radius:50%;margin-left:3px;box-shadow:0 0 8px rgba(255,215,0,.9);animation:vgateSparkle 1.2s ease-in-out infinite;"></span></div>
+              <div id="vgate-wr-val" style="font-family:'Orbitron',monospace;font-size:24px;font-weight:900;background:linear-gradient(135deg,#ffd700 0%,#ffed4e 50%,#ff8c00 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 14px rgba(255,215,0,.6));animation:vgateApexPulse 2.5s ease-in-out infinite;letter-spacing:-.5px;">+341.9%</div>
+              <div style="font-size:8px;color:rgba(255,215,0,.85);letter-spacing:1.3px;font-family:'JetBrains Mono',monospace;font-weight:700;text-shadow:0 0 6px rgba(255,215,0,.3);">APEX PnL 365d (bruto) <span style="display:inline-block;width:5px;height:5px;background:#ffd700;border-radius:50%;margin-left:3px;box-shadow:0 0 8px rgba(255,215,0,.9);animation:vgateSparkle 1.2s ease-in-out infinite;"></span></div>
+              <div style="font-size:7px;color:rgba(255,255,255,.4);letter-spacing:.5px;font-family:'JetBrains Mono',monospace;margin-top:2px;">net ~+37% post-costos</div>
               <div style="position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,215,0,.18),transparent);animation:vgateApexShine 3s ease-in-out infinite;"></div>
             </div>
             <style>
@@ -8761,8 +8748,9 @@ async function cloudSyncOnLogin(){
 
 // Modos de señales global
 // 2026-04-26: APEX por defecto en panel VIP. Non-VIP users get auto-switched to 'frequent' by changeMainMode/changePubMode.
-let mainDashboardMode = 'strict';
-let publicSignalsMode = 'strict';
+// 2026-04-29: only initialize APEX as default when user IS VIP. Non-VIP gets CORE ('frequent') from boot.
+let mainDashboardMode = (typeof vipUnlocked !== 'undefined' && vipUnlocked) ? 'strict' : 'frequent';
+let publicSignalsMode = (typeof vipUnlocked !== 'undefined' && vipUnlocked) ? 'strict' : 'frequent';
 let vipSignalMode = 'strict'; // 2026-04-22: APEX rebrand — 'strict' mode internal = funding carry (ex-SAFE); 'binance' = legacy directional (hidden from UI)
 
 // ═══ SIGNAL LOCK — Keeps signals visible for traders to replicate ═══
@@ -9494,9 +9482,9 @@ function updAcc(){
   if(landAccVal) landAccVal.textContent = displayVip;
   const landAccVal2 = document.getElementById('land-acc-val2');
   if(landAccVal2) landAccVal2.textContent = displayVip + '%';
-  // 2026-04-23: vgate-wr-val now shows APEX PnL (not WR) — static stat from validated holdout
+  // 2026-04-29: vgate-wr-val shows APEX PnL gross (V44.6 holdout) — static from validated holdout
   const vgateWr = document.getElementById('vgate-wr-val');
-  if(vgateWr) vgateWr.textContent = '+37%';
+  if(vgateWr) vgateWr.textContent = '+341.9%';
 
   const landAccSig = document.getElementById('land-acc-sig');
   if(landAccSig) landAccSig.textContent = tot;
@@ -17137,10 +17125,35 @@ function renderSigHistory(){
     return `<tr><td>${timeStr}</td><td><strong>${s.sym.replace('USDT','')}</strong></td><td>${modeBadge}</td><td style="color:${sigColor};font-weight:700">${s.signal}</td><td>$${Number(s.entry||0).toFixed(2)}</td><td style="color:#00ff41">$${Number(s.tp||0).toFixed(2)}</td><td style="color:#ff3a3a">$${Number(s.sl||0).toFixed(2)}</td><td>${s.conf}%</td><td>${resBadge}</td></tr>`;
   }).join('');
   // Update accuracy rate display (uses filtered set too)
-  updateSigAccuracyRate();
-  updateHistoricalStats();
-  renderEquityCurve();
+  try { updateSigAccuracyRate(); } catch(_) {}
+  try { updateHistoricalStats(); } catch(_) {}
+  try { renderEquityCurve(); } catch(_) {}
 }
+
+// 2026-04-28: implements the missing updateSigAccuracyRate (was called but never defined,
+// breaking renderSigHistory entirely). Computes WIN/(WIN+LOSS) ratio over closed signals.
+function updateSigAccuracyRate(){
+  const el = document.getElementById('sig-accuracy-rate');
+  if(!el) return;
+  const closed = (typeof sigHistoryData !== 'undefined' ? sigHistoryData : []).filter(s => s.result === 'WIN' || s.result === 'LOSS');
+  if(closed.length === 0){
+    el.innerHTML = '';
+    el.style.display = 'none';
+    return;
+  }
+  const wins = closed.filter(s => s.result === 'WIN').length;
+  const wr = (wins / closed.length) * 100;
+  const color = wr >= 60 ? '#00ff41' : wr >= 50 ? '#ffaa00' : '#ff3a3a';
+  const bg = wr >= 60 ? 'rgba(0,255,65,.08)' : wr >= 50 ? 'rgba(255,170,0,.08)' : 'rgba(255,58,58,.08)';
+  el.style.display = '';
+  el.style.color = color;
+  el.style.background = bg;
+  el.style.borderColor = color + '33';
+  el.textContent = `${wr.toFixed(1)}% WR · ${wins}/${closed.length}`;
+}
+
+// 2026-04-28: updateHistoricalStats already exists at line 16874 with full implementation.
+// Removed duplicate stub that was overriding it.
 
 function renderEquityCurve(){
   const canvas=document.getElementById('equity-canvas');
@@ -25365,17 +25378,23 @@ document.addEventListener('keydown', (e) => {
         }
       } catch(e) { console.warn('[RXSignals] error syncing to historial:', e); }
     });
-    RXSignals.subscribe('signal:expired', (sigId) => {
-      console.log('[RXSignals] signal expired', sigId);
-      window.dispatchEvent(new CustomEvent('rx-signal-expired', { detail: { signalId: sigId } }));
-      // 2026-04-28: mark expired signals as EXPIRED in legacy historial
+    RXSignals.subscribe('signal:expired', (sigId, meta) => {
+      meta = meta || {};
+      console.log('[RXSignals] signal expired', sigId, 'outcome:', meta.outcome, 'reason:', meta.reason);
+      window.dispatchEvent(new CustomEvent('rx-signal-expired', { detail: { signalId: sigId, ...meta } }));
+      // 2026-04-29: mark with WIN/LOSS/EXPIRED based on server outcome
       try {
         if (typeof sigHistoryData !== 'undefined' && Array.isArray(sigHistoryData)) {
           let changed = false;
           sigHistoryData.forEach(s => {
             if (s._serverId === sigId && s.result === 'OPEN') {
-              s.result = 'EXPIRED';
+              // Map server outcome to frontend result label
+              if (meta.outcome === 'WIN') s.result = 'WIN';
+              else if (meta.outcome === 'LOSS') s.result = 'LOSS';
+              else s.result = 'EXPIRED'; // NO_HIT or unknown
+              if (meta.exitPrice != null) s.exitPrice = parseFloat(meta.exitPrice);
               s.closedAt = new Date().toISOString();
+              s._closeReason = meta.reason || null;
               changed = true;
             }
           });

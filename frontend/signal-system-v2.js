@@ -152,8 +152,9 @@
       bcEmit({ kind: 'signal:created', signal: ev.signal });
     } else if (ev.event_type === 'expired') {
       state.signals.delete(ev.signal_id);
-      emit('signal:expired', ev.signal_id);
-      bcEmit({ kind: 'signal:expired', signalId: ev.signal_id });
+      // 2026-04-29: pass meta (outcome, exitPrice, reason) so historial can show WIN/LOSS/NO_HIT
+      emit('signal:expired', ev.signal_id, ev.meta || {});
+      bcEmit({ kind: 'signal:expired', signalId: ev.signal_id, meta: ev.meta || {} });
     } else if (ev.event_type === 'superseded' || ev.event_type === 'state_changed') {
       const sig = state.signals.get(ev.signal_id);
       if (sig) {
