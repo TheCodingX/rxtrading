@@ -15991,9 +15991,14 @@ function applyPaperSignal(){
 //  AUTOTRADING SYSTEM
 // ════════════════════════════════════════════════════
 function getEffectiveMinConf(){
-  const stgVal = parseInt(document.getElementById('stg-min-conf')?.value) || 65;
-  const atVal = parseInt(document.getElementById('autotrade-min-conf')?.value) || 70;
-  return Math.max(stgVal, atVal);
+  // 2026-04-29: respect the slider the user is interacting with (autotrade panel slider),
+  // not max of both. Previously max(stg=65, at=50)=65 made user-set 50% appear ignored.
+  const atEl = document.getElementById('autotrade-min-conf');
+  if (atEl && !isNaN(parseInt(atEl.value))) return parseInt(atEl.value);
+  // Fallback to stg slider if autotrade not present
+  const stgEl = document.getElementById('stg-min-conf');
+  if (stgEl && !isNaN(parseInt(stgEl.value))) return parseInt(stgEl.value);
+  return 50; // safe default matching baseline
 }
 let autoTradeActive = false;
 let autoTradeInterval = null;
