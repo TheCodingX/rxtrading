@@ -3564,10 +3564,11 @@ body.is-vip-mode #CR {
    <div style="display:flex; flex-direction:column; align-items:center; margin-bottom:18px; gap:10px;">
                 <div class="sp-lbl" style="margin-bottom:0;">SEÑAL MULTI-INDICADOR</div>
                 <div style="display:flex;align-items:center;gap:8px; background:var(--bg1); padding:4px 8px; border-radius:6px; border:1px solid rgba(0,255,65,0.1);">
-                    <span id="main-mode-badge" class="wr-badge badge-free">APEX</span>
+                    <!-- 2026-04-29: default CORE for non-VIP. JS upgrades to APEX once vipUnlocked = true. -->
+                    <span id="main-mode-badge" class="wr-badge badge-free">CORE</span>
                     <select class="ms" id="main-mode-sel" onchange="changeMainMode(this.value)" style="font-size:9px;padding:2px 20px 2px 6px;height:22px;border-color:transparent;color:var(--n); background-color:transparent;">
-                        <option value="strict" selected>APEX ENGINE</option>
-                        <option value="frequent">CORE</option>
+                        <option value="frequent" selected>CORE</option>
+                        <option value="strict">APEX ENGINE</option>
                     </select>
                 </div>
             </div>
@@ -9123,8 +9124,11 @@ function enableVIPUI(code, name="") {
   if(vipPromo) vipPromo.style.display = 'none';
 
   // 2026-04-23: APEX (strict) is flagship VIP motor. 'scalp' legacy not in UI options → caused empty select.
+  // 2026-04-29: also upgrade the visible badge from CORE → APEX on VIP unlock
   mainDashboardMode = 'strict';
   document.getElementById('main-mode-sel').value = 'strict';
+  const _mainBadge = document.getElementById('main-mode-badge');
+  if (_mainBadge) { _mainBadge.textContent = 'APEX'; _mainBadge.classList.remove('badge-free'); _mainBadge.classList.add('badge-vip'); }
   applyMainDashboardStyles();
 
   publicSignalsMode = 'strict';
@@ -14108,13 +14112,21 @@ async function updOI() {
     } catch(e) {}
 }
 
+// 2026-05-01: auto-retry helper — if price not ready yet, retry every 1.5s up to 20 times
+let _liqLevelsRetryTimer = null;
 function updLiqLevels(){
   if(!vipUnlocked) return;
   const el=document.getElementById('liq-levels-list');
   if(!el) return;
   const sym=vSym||'BTCUSDT';
   const price=px[sym];
-  if(!price){el.innerHTML='<div style="color:rgba(255,215,0,.4);text-align:center;padding:10px;font-size:10px">Esperando precio...</div>';return;}
+  if(!price){
+    el.innerHTML='<div style="color:rgba(255,215,0,.4);text-align:center;padding:10px;font-size:10px"><span class="loader-dots"><div></div><div></div><div></div></span></div>';
+    // Schedule retry: WS feed populates px[sym] asynchronously after page load
+    if (_liqLevelsRetryTimer) clearTimeout(_liqLevelsRetryTimer);
+    _liqLevelsRetryTimer = setTimeout(() => updLiqLevels(), 1500);
+    return;
+  }
   const leverages=[5,10,25,50,100];
   const rows=leverages.map(lev=>{
     const liqLong=price*(1-1/lev)*1.005; // +0.5% fee buffer
@@ -15129,6 +15141,17 @@ function openPaperTrade(dir, opts){
     paperData.positions.push({id:_posId,sym,dir,amt,lev,entry:price,tp:tpVal,sl:slVal,conf:manualConf,time:new Date().toISOString(),_openedAt:Date.now(),_signalId:sigId||null,state:'OPEN'});
     // 2026-04-24 FIX B.1: marcar señal como operada (persistente)
     if(sigId) rxMarkSignalOperated(sigId);
+    // 2026-05-01: ensure WS subscribes to this symbol so PnL updates live (renderPaper polls px[sym])
+    try {
+      if (typeof _connectFuturesWS === 'function') _connectFuturesWS();
+      // Also kick a REST fetch immediately to seed px[sym] in case WS is slow
+      if (!px[sym] || px[sym] <= 0) {
+        fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${sym}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(j => { if (j && j.price) { px[sym] = parseFloat(j.price); _pxTimestamp[sym] = Date.now(); renderPaper(); } })
+          .catch(() => {});
+      }
+    } catch(e) { /* non-fatal */ }
     savePaper(true); renderPaper(); // immediate sync
     toast(`${dir} ${sym.replace('USDT','')} — $${amt} x${lev}`);
   } finally {
@@ -15396,7 +15419,8 @@ const bestEl=document.getElementById('paper-best');
       const confBadge=cc>0?` <span style="font-size:8px;font-family:'JetBrains Mono',monospace;padding:1px 5px;border-radius:3px;background:${confColor}15;border:1px solid ${confColor}50;color:${confColor};margin-left:4px">${cc}%</span>`:'';
       const openTime = p.time ? new Date(p.time) : null;
       const openTag = openTime ? ` <span style="font-size:8px;color:var(--td);opacity:0.6">${String(openTime.getUTCHours()).padStart(2,'0')}:${String(openTime.getUTCMinutes()).padStart(2,'0')} UTC</span>` : '';
-      return `<div class="paper-pos"><span class="dir" style="color:${p.dir==='BUY'?'#00ff41':'#ff3a3a'}">${p.dir}</span> <strong>${p.sym.replace('USDT','')}</strong> x${p.lev}${confBadge}${openTag} — $${p.amt.toFixed(0)} @ ${p.entry.toFixed(2)}${tpSlInfo} → <span style="color:${pnl>=0?'#00ff41':'#ff3a3a'}">${pnl>=0?'+':''}$${pnl.toFixed(2)}</span> <button class="tbtn tb-n" onclick="closePaperTrade(${p.id})" style="margin-left:auto;padding:3px 8px;font-size:8px;color:#ff3a3a;border-color:rgba(255,58,58,.3)">CERRAR</button></div>`;
+      // 2026-05-01: data-pos-id + data-* on pnl span so live updater can refresh without re-rendering whole row
+      return `<div class="paper-pos" data-pos-id="${p.id}" data-pos-sym="${p.sym}" data-pos-dir="${p.dir}" data-pos-amt="${p.amt}" data-pos-lev="${p.lev}" data-pos-entry="${p.entry}"><span class="dir" style="color:${p.dir==='BUY'?'#00ff41':'#ff3a3a'}">${p.dir}</span> <strong>${p.sym.replace('USDT','')}</strong> x${p.lev}${confBadge}${openTag} — $${p.amt.toFixed(0)} @ ${p.entry.toFixed(2)}${tpSlInfo} → <span class="paper-pos-pnl" style="color:${pnl>=0?'#00ff41':'#ff3a3a'}">${pnl>=0?'+':''}$${pnl.toFixed(2)}</span> <button class="tbtn tb-n" onclick="closePaperTrade(${p.id})" style="margin-left:auto;padding:3px 8px;font-size:8px;color:#ff3a3a;border-color:rgba(255,58,58,.3)">CERRAR</button></div>`;
     }).join('');}
   }
   // Trade history
@@ -15715,21 +15739,48 @@ async function refreshPaperSignal(){
   const realSigs = allSigs.filter(s => s && s.signal !== 'NEUTRAL').sort((a,b) => b.confidence - a.confidence);
 
   // If we found a new real signal → update display + alert
+  // 2026-05-01: respect manual coin selection. If user clicked BTC, show BTC's signal
+  // (or NEUTRAL if BTC has none). Don't auto-jump to the highest-confidence pair.
   if(realSigs.length > 0){
-    const sig = realSigs[0];
-    const sym = sig.symbol || 'BTCUSDT';
-    paperLastSig = sig;
-    _paperLastGoodSig = {...sig, _foundAt: Date.now()};
+    const selectedCoinSym = paperSelectedCoin
+      || document.getElementById('paper-sym')?.value
+      || 'BTCUSDT';
+    const sigForSelected = realSigs.find(s => (s.symbol || '') === selectedCoinSym);
 
-    // Auto-select the winning coin button
-    document.querySelectorAll('.paper-coin-btn').forEach(b => {
-      b.classList.toggle('on', b.textContent.trim() === sym.replace('USDT',''));
-    });
-    paperSelectedCoin = sym;
-    const symSel = document.getElementById('paper-sym'); if(symSel) symSel.value = sym;
-
-    _updatePaperSigDisplay(sig, sym);
-    _updateLastSigInfo(sig, sym); // Show "last signal" info below
+    if (sigForSelected) {
+      // User's selected coin has a real signal → display it
+      const sig = sigForSelected;
+      const sym = sig.symbol;
+      paperLastSig = sig;
+      _paperLastGoodSig = {...sig, _foundAt: Date.now()};
+      paperSelectedCoin = sym;
+      const symSel = document.getElementById('paper-sym'); if(symSel) symSel.value = sym;
+      document.querySelectorAll('.paper-coin-btn').forEach(b => {
+        b.classList.toggle('on', b.textContent.trim() === sym.replace('USDT',''));
+      });
+      _updatePaperSigDisplay(sig, sym);
+      _updateLastSigInfo(sig, sym);
+    } else if (!paperSelectedCoin) {
+      // No manual selection → fall back to best confidence (initial load)
+      const sig = realSigs[0];
+      const sym = sig.symbol || 'BTCUSDT';
+      paperLastSig = sig;
+      _paperLastGoodSig = {...sig, _foundAt: Date.now()};
+      paperSelectedCoin = sym;
+      const symSel = document.getElementById('paper-sym'); if(symSel) symSel.value = sym;
+      document.querySelectorAll('.paper-coin-btn').forEach(b => {
+        b.classList.toggle('on', b.textContent.trim() === sym.replace('USDT',''));
+      });
+      _updatePaperSigDisplay(sig, sym);
+      _updateLastSigInfo(sig, sym);
+    } else {
+      // User has manual selection but no signal for that coin → keep selection, show NEUTRAL.
+      // _updateLastSigInfo can still show the best-elsewhere as informational footer.
+      const fallbackSig = { signal:'NEUTRAL', confidence:50, symbol:selectedCoinSym, B:0, S:0 };
+      paperLastSig = fallbackSig;
+      _updatePaperSigDisplay(fallbackSig, selectedCoinSym);
+      _updateLastSigInfo(realSigs[0], realSigs[0].symbol || selectedCoinSym);
+    }
 
     // ALERT — trigger notification for paper trading signal
     toast(`SEÑAL PAPER: ${sig.signal} — ${sym.replace('USDT','')} (${sig.confidence}%)`);
@@ -16795,6 +16846,29 @@ function addAutoTradeLogEntry(msg){
 let sigHistoryData = JSON.parse(localStorage.getItem(LS_SIG_HIST_KEY) || '[]');
 let equityChart = null;
 
+// 2026-05-01: ON-LOAD CLEANUP — remove duplicate signals accumulated from pre-dedup builds.
+// Same (sym, signal, entry, tp, sl) within 30min window → keep first, drop the rest.
+// Idempotent: subsequent loads with clean data are no-ops.
+(function _dedupSigHistoryOnLoad(){
+  if (!Array.isArray(sigHistoryData) || sigHistoryData.length === 0) return;
+  const seen = new Map(); // key -> first-seen entry
+  const cleaned = [];
+  for (const s of sigHistoryData) {
+    if (!s || !s.sym || !s.signal) { cleaned.push(s); continue; }
+    const t = s.time ? new Date(s.time).getTime() : 0;
+    const bucketKey = `${s.sym}|${s.signal}|${s.entry}|${s.tp}|${s.sl}|${Math.floor(t / (30 * 60 * 1000))}`;
+    if (seen.has(bucketKey)) continue; // skip dup
+    seen.set(bucketKey, true);
+    cleaned.push(s);
+  }
+  if (cleaned.length !== sigHistoryData.length) {
+    const removed = sigHistoryData.length - cleaned.length;
+    console.log('[sigHistory cleanup] removed', removed, 'duplicate signals on boot');
+    sigHistoryData = cleaned;
+    try { localStorage.setItem(LS_SIG_HIST_KEY, JSON.stringify(sigHistoryData.slice(-200))); } catch(e){}
+  }
+})();
+
 function saveSigHistory(){ localStorage.setItem(LS_SIG_HIST_KEY, JSON.stringify(sigHistoryData.slice(-200))); _debouncedSyncSignals(); }
 
 // No fake seed data — equity curve builds from real trades only
@@ -16889,14 +16963,15 @@ function updateHistoricalStats(){
   const wr=((wins.length/closed.length)*100);
   const wrColor=wr>=50?'#00ff41':'#ff3a3a';
 
-  // Compute PnL per signal for profit factor
+  // 2026-04-29: PnL en PORCENTAJE (no diferencia absoluta de precio).
+  // Bug previo: BTC win = $227 raw, TRX loss = $0.001 raw → PF = 227/0.001 = 227000 (bugeado).
+  // Fix: usar (TP-entry)/entry × 100 para que pares con precios distintos sean comparables.
   function pnl(s){
-    if(s.entry && s.tp && s.sl){
-      const dir=s.signal==='BUY'?1:-1;
-      if(s.result==='WIN') return Math.abs(s.tp - s.entry);
-      if(s.result==='LOSS') return -Math.abs(s.entry - s.sl);
+    if(s.entry && s.tp && s.sl && s.entry > 0){
+      if(s.result==='WIN') return (Math.abs(s.tp - s.entry) / s.entry) * 100;     // % ganado
+      if(s.result==='LOSS') return -(Math.abs(s.entry - s.sl) / s.entry) * 100;   // % perdido
     }
-    return s.result==='WIN'?1:-1;
+    return s.result==='WIN'?1:-1; // fallback: 1R por trade
   }
   let grossWin=0,grossLoss=0;
   closed.forEach(s=>{const p=pnl(s);if(p>0)grossWin+=p;else grossLoss+=Math.abs(p);});
@@ -16932,7 +17007,7 @@ function updateHistoricalStats(){
   symBody.innerHTML=symArr.map(s=>{
     const c=s.pnl>=0?'#00ff41':'#ff3a3a';
     const wrC=s.wr>=50?'#00ff41':'#ff3a3a';
-    return `<tr><td><strong>${s.sym.replace('USDT','')}</strong></td><td>${s.total}</td><td style="color:${wrC}">${s.wr.toFixed(1)}%</td><td style="color:${c}">${s.pnl>=0?'+':''}${s.pnl.toFixed(2)}</td></tr>`;
+    return `<tr><td><strong>${s.sym.replace('USDT','')}</strong></td><td>${s.total}</td><td style="color:${wrC}">${s.wr.toFixed(1)}%</td><td style="color:${c}">${s.pnl>=0?'+':''}${s.pnl.toFixed(2)}%</td></tr>`;
   }).join('');
 
   // --- 3. Hourly heatmap ---
@@ -19544,14 +19619,31 @@ function _addToVipSignalHistory(sym, sig, mode){
   const _sigMode = mode || _currentMode;
   // Guard: only add signals from the currently selected mode (avoid stale cross-engine leaks)
   if(_sigMode !== _currentMode) return;
+  const entryFmt = sig.entry ? fP(sig.entry, sym) : '—';
+  const tpFmt = sig.tp ? fP(sig.tp, sym) : '—';
+  const slFmt = sig.sl ? fP(sig.sl, sym) : '—';
+  // 2026-04-29 ANTI-SPAM: skip if last entry for same (symbol, signal, entry, tp, sl) within 30 min.
+  // The local scanner runs every ~30s and re-emits the same signal repeatedly while it's active.
+  // The queue must show DISTINCT signals only, not the same one repeated 5+ times.
+  const now = Date.now();
+  const dupRecent = _vipSignalQueue.find(e =>
+    e.symbol === sym &&
+    e.signal === sig.signal &&
+    e.entry === entryFmt &&
+    e.tp === tpFmt &&
+    e.sl === slFmt &&
+    e.mode === _sigMode &&
+    (now - new Date(e.time).getTime()) < 30 * 60 * 1000
+  );
+  if (dupRecent) return; // already in queue, skip
   const entry = {
     time: new Date(),
     coin: sym.replace('USDT',''),
     symbol: sym,
     signal: sig.signal,
-    entry: sig.entry ? fP(sig.entry, sym) : '—',
-    tp: sig.tp ? fP(sig.tp, sym) : '—',
-    sl: sig.sl ? fP(sig.sl, sym) : '—',
+    entry: entryFmt,
+    tp: tpFmt,
+    sl: slFmt,
     conf: sig.confidence || '—',
     mode: _sigMode
   };
@@ -21258,6 +21350,29 @@ async function boot(){
   setInterval(evaluateSignals, 5000); // 5s — TP/SL evaluation en tiempo real
   setInterval(()=>{if(tabVisible)renderPaper();}, 1000); // 1s — PnL en tiempo real
   setInterval(()=>{if(tabVisible) _updateLiveSignalPrice();}, 2000); // 2s — live signal entry price
+  // 2026-05-01 LIVE PNL — DOM-only update for paper open positions every 1.5s.
+  // Independent of renderPaper(): writes pnl directly to .paper-pos-pnl span using data-* attrs.
+  // This ensures PnL ticks in real-time even if renderPaper is skipped or px[sym] just got populated.
+  setInterval(() => {
+    if (!tabVisible) return;
+    document.querySelectorAll('.paper-pos[data-pos-id]').forEach(row => {
+      const sym = row.dataset.posSym;
+      const dir = row.dataset.posDir;
+      const amt = parseFloat(row.dataset.posAmt);
+      const lev = parseFloat(row.dataset.posLev);
+      const entry = parseFloat(row.dataset.posEntry);
+      if (!sym || !entry || !amt || !lev) return;
+      const cur = px[sym];
+      if (!cur || cur <= 0 || isNaN(cur)) return;
+      const pct = (cur - entry) / entry;
+      const pnl = dir === 'BUY' ? amt * lev * pct : amt * lev * (-pct);
+      const span = row.querySelector('.paper-pos-pnl');
+      if (span) {
+        span.textContent = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2);
+        span.style.color = pnl >= 0 ? '#00ff41' : '#ff3a3a';
+      }
+    });
+  }, 1500);
   setInterval(()=>{if(vipUnlocked&&tabVisible)updateMTFPanel();}, 120000);
   // ═══ LIVE PAPER SIGNAL POLLING — señales llegan sin interacción ═══
   setInterval(()=>{if(vipUnlocked) refreshPaperSignal();}, 30000); // 30s — escaneo auto de paper signals
