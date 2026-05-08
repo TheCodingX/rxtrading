@@ -4,7 +4,7 @@
     {
       "name": "rxtrading-local",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["http-server", "/Users/rocki/Documents/rxtrading/frontend", "-p", "8090", "-c-1", "--cors"],
+      "runtimeArgs": ["http-server", "/Users/rocki/Documents/rxtrading/.claude/worktrees/sad-nightingale/frontend", "-p", "8090", "-c-1", "--cors"],
       "port": 8090
     }
   ]

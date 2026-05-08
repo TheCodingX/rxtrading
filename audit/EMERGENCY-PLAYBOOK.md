@@ -32,14 +32,16 @@ Si estás frente a un incidente, responde estas 3 preguntas:
 ### 1. PAUSE AUTOTRADE GLOBAL (bloquea nuevos trades, no cierra abiertos)
 
 ```bash
-# Requiere ADMIN_SECRET
-curl -X POST https://api.rxtrading.net/api/admin/autotrade/pause-all \
-  -H "x-admin-secret: $ADMIN_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"reason":"emergency — reason here","durationHours":24}'
+# 2026-05-07 — endpoint actualizado (ver server.js l.829+)
+curl -X POST https://api.rxtrading.net/api/admin/pause-autotrade \
+  -H "x-admin-secret: $ADMIN_SECRET"
+# Estado:
+curl https://api.rxtrading.net/api/admin/autotrade-status -H "x-admin-secret: $ADMIN_SECRET"
+# Resume:
+curl -X POST https://api.rxtrading.net/api/admin/resume-autotrade -H "x-admin-secret: $ADMIN_SECRET"
 ```
 
-**Efecto:** Todos los users VIP ven banner "Autotrading pausado por administrador". Nuevas signals bloqueadas. Posiciones abiertas **SIGUEN ACTIVAS** con TP/SL en Binance.
+**Efecto:** El endpoint `POST /api/signals/:id/operate` empieza a devolver 503 `autotrade_paused`. Posiciones abiertas **SIGUEN ACTIVAS** con TP/SL en Binance. El cron de cierre `runTradeCloseCycle` y reconcile siguen corriendo (no se pausan — lo importante es no abrir nuevos trades).
 
 ### 2. CLOSE ALL POSITIONS (emergency only)
 
@@ -71,6 +73,76 @@ curl -X POST https://api.rxtrading.net/api/admin/keys/revoke \
   -H "x-admin-secret: $ADMIN_SECRET" \
   -d '{"code":"RX-VIP-XXXX","reason":"suspicious activity"}'
 ```
+
+### 5. CIERRE FORZADO DE TRADES DE UN USER (DB-only)
+
+```bash
+# Cierra todos los OPEN/PENDING_* del user (paper + real). Para real_*, esto NO
+# cancela en Binance — usá endpoints de broker para eso. Útil cuando el user reporta
+# un trade colgado y querés desbloquearlo en DB.
+curl -X POST https://api.rxtrading.net/api/admin/close-user-trades/$KEY_ID \
+  -H "x-admin-secret: $ADMIN_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"reason":"ADMIN_OVERRIDE"}'
+```
+
+### 6. CIERRE MASIVO DE PAPER ZOMBIES
+
+```bash
+# DRY-RUN primero (devuelve CSV con qué trades cerraría):
+curl -X POST "https://api.rxtrading.net/api/admin/close-zombie-paper-trades?dry_run=1" \
+  -H "x-admin-secret: $ADMIN_SECRET"
+
+# Ejecutar de verdad:
+curl -X POST "https://api.rxtrading.net/api/admin/close-zombie-paper-trades" \
+  -H "x-admin-secret: $ADMIN_SECRET"
+```
+
+Solo afecta `mode='paper'`. Real trades se reconcilian con Binance.
+
+---
+
+## Sistema de cierres (post-2026-05-07)
+
+**Cómo se cierran los trades — flujo en producción:**
+
+1. **Signal level** (tabla `signals`):
+   - `runTpslMonitorCycle` cada 30s: fetch OHLC 5m de Binance, detecta TP/SL hit, cierra signal con outcome=WIN/LOSS.
+   - `runExpirationCycle` cada 60s: signals con `expires_at < NOW` → state=EXPIRED + outcome=NO_HIT.
+2. **Trade level** (tabla `signal_trades`, per-user):
+   - `runTradeCloseCycle` cada 30s **(2026-05-07 nuevo)**: para cada trade OPEN cuyo signal asociado cerró, cierra el trade con reason derivada (TP_HIT/SL_HIT/TIME_STOP).
+   - `runReconcileCycle` cada 5min: cierra trades real_* cuando Binance reportó cierre externo.
+3. **Frontend** (defense-in-depth): `closePaperTrade` también detecta TP/SL client-side cuando la app está abierta (redundancia).
+
+**Verificar salud del sistema:**
+```bash
+# Trades OPEN globalmente, con signal asociado y "anomaly_kind"
+curl "https://api.rxtrading.net/api/admin/open-trades?limit=200" \
+  -H "x-admin-secret: $ADMIN_SECRET" | jq '.summary'
+
+# Solo anomalías (signal cerrado pero trade OPEN, o TTL > 1h)
+curl "https://api.rxtrading.net/api/admin/open-trades?anomalies_only=1" \
+  -H "x-admin-secret: $ADMIN_SECRET" | jq '.trades[] | {trade_id, key_id, age_seconds, anomaly_kind}'
+
+# Forzar correr el cron de cierre ahora (en vez de esperar 30s)
+curl -X POST https://api.rxtrading.net/api/admin/run-trade-close \
+  -H "x-admin-secret: $ADMIN_SECRET" | jq .
+```
+
+**Síntomas de incidente y respuesta:**
+
+| Síntoma | Diagnóstico | Acción |
+|---|---|---|
+| User reporta "mi trade no cerró" | `GET /api/admin/open-trades?anomalies_only=1` para ese user | Si aparece: `POST /api/admin/run-trade-close`. Si persiste: investigar logs `[SignalCron][TradeClose]` en Render. |
+| Aumento súbito de `anomaly_kind=signal_closed_trade_open` | Cron `runTradeCloseCycle` no corre (timer caído) | Reiniciar el server. Verificar logs de startup `[SignalCron] trade close propagator started`. |
+| `[SignalCron][TPSL] error` repetido | Binance fapi rate-limited o down | Esperar (fallback a Bybit ya está). Si > 30 min, escalar. |
+| Trades real_* con divergence (Binance vs DB) | `runReconcileCycle` detectó posición Binance sin trade DB | Ya hay notif al user. Investigar manualmente: `gh broker.getOpenPositions` del user, comparar con `signal_trades`. |
+| `[SignalCron][TradeClose]` log queda silencioso varias horas | Timer murió. Bug en query DB o pool exhausted. | Restart. Si recurre, verificar `pool.totalCount`/`waitingCount` en `/api/admin/metrics`. |
+
+**Documentos relacionados:**
+- `audit/CLOSE-SYSTEM-MAP.md` — flujo completo de los 3 niveles
+- `audit/CLOSE-SYSTEM-DIAGNOSIS.md` — root cause del incidente original
+- `audit/ZOMBIE-TRADES-RECOVERY.md` — historial de zombies recuperados
 
 ---
 

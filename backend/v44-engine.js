@@ -30,8 +30,14 @@ const SAFE_FUNDING_PARAMS = Object.freeze({
   // 2026-04-28: defaults calibrados al régimen low-vol Q2 2026 (funding rates típicos 0.0001-0.002).
   // Antes: 0.005/-0.002 (high-vol 2024) producían 0 signals. Ahora 0.002/-0.0008 mantienen el edge
   // de funding extreme sin filtrar todo. Backtest validado en holdout 2025 con estos thresholds.
+  // 2026-05-01: when realFundArr (premium index real) is provided, the natural range is
+  //   ~10× smaller than the EMA proxy. We use _REAL floors instead so the extreme-detection
+  //   triggers at the right magnitude. Defaults set from typical Binance premium index range
+  //   (-0.0005 ~ +0.001 in low-vol regime; spikes to ±0.003 around settlement).
   F_POS_MIN: _envFloat('APEX_F_POS_MIN', 0.002),
   F_NEG_MAX: _envFloat('APEX_F_NEG_MAX', -0.0008),
+  F_POS_MIN_REAL: _envFloat('APEX_F_POS_MIN_REAL', 0.00015),
+  F_NEG_MAX_REAL: _envFloat('APEX_F_NEG_MAX_REAL', -0.00010),
   SIZE_PCT: 0.10,
   ELITE_M1_ENABLED: true,
   Z_LOW: 1.0, Z_MID: 2.0, Z_HIGH: 3.0,
@@ -549,7 +555,7 @@ function isEligibleHour(hr){
   return getWindowTypeForHour(hr) !== null;
 }
 
-function evaluateFundingCarry(pair, bars1h){
+function evaluateFundingCarry(pair, bars1h, opts = {}){
   const p = SAFE_FUNDING_PARAMS;
   if(!bars1h || bars1h.length < p.Z_LOOKBACK_H + 50) return null;
   const idx = bars1h.length - 1;
@@ -558,7 +564,20 @@ function evaluateFundingCarry(pair, bars1h){
   const windowType = getWindowTypeForHour(hr);
   if(!windowType) return null;
 
-  const fundArr = computeFundingProxy(bars1h);
+  // 2026-05-01 — Use REAL funding/premium-index series when available (the strategy is
+  // literally called "funding-carry"; the legacy proxy `(price - EMA50)/EMA50` is just a
+  // technical indicator unrelated to actual perpetual funding). The caller passes the
+  // aligned series via opts.realFundArr; if absent or too short, we fall back to the
+  // legacy proxy so the engine keeps operating in degraded mode (e.g. when all funding
+  // sources are unreachable).
+  let fundArr = null;
+  let fundingSource = 'proxy_ema';
+  if (opts.realFundArr && opts.realFundArr.length === bars1h.length && isFinite(opts.realFundArr[idx])) {
+    fundArr = opts.realFundArr;
+    fundingSource = opts.fundingSourceName || 'real';
+  } else {
+    fundArr = computeFundingProxy(bars1h);
+  }
   if(!fundArr) return null;
   const f = fundArr[idx];
   if(!isFinite(f)) return null;
@@ -569,9 +588,15 @@ function evaluateFundingCarry(pair, bars1h){
   const p80 = sorted[Math.floor(sorted.length * p.P80_Q)] || 0;
   const p20 = sorted[Math.floor(sorted.length * p.P20_Q)] || 0;
 
+  // 2026-05-01: floors depend on funding source. Premium-index real has ~10× smaller
+  // amplitude than the EMA proxy → we use _REAL floors to keep extreme-detection
+  // calibrated to the actual data magnitude, otherwise NO signal would ever fire.
+  const fPosFloor = (fundingSource === 'proxy_ema') ? p.F_POS_MIN : p.F_POS_MIN_REAL;
+  const fNegFloor = (fundingSource === 'proxy_ema') ? p.F_NEG_MAX : p.F_NEG_MAX_REAL;
+
   let dir = 0;
-  if(f > p80 && f > p.F_POS_MIN) dir = -1;
-  else if(f < p20 && f < p.F_NEG_MAX) dir = 1;
+  if(f > p80 && f > fPosFloor) dir = -1;
+  else if(f < p20 && f < fNegFloor) dir = 1;
   if(dir === 0) return null;
 
   const z = fundingZScore(fundArr, idx, p.Z_LOOKBACK_H);
@@ -630,6 +655,7 @@ function evaluateFundingCarry(pair, bars1h){
     entry, tp, sl,
     funding: f,
     funding_zscore: z,
+    funding_source: fundingSource, // 2026-05-01: 'real' / 'proxy_ema' for diag
     size_multiplier: sizeMult,
     sizing_engine: v44_6active ? 'V44.6' : (v45active ? 'V44.5' : 'V44_coarse'),
     quality_score,
@@ -888,15 +914,24 @@ function getBarsCacheStats() {
 // 2026-04-28: process pairs SERIALLY to avoid OKX rate limit on paginated calls.
 // First scan: ~30s (15 pairs × 2s cada). Subsequent scans within 50min: instant
 // thanks to in-memory bars cache. V44 uses 1h bars so cache TTL aligns with bar duration.
+// 2026-05-01: also fetch real funding/premium-index per pair (cached) to use in
+// evaluateFundingCarry instead of the legacy EMA proxy. This is THE fix for the
+// backtest-vs-live divergence (a "funding-carry" engine running on a fake funding
+// signal will produce coinflip outcomes regardless of ancillary palancas).
 async function scanAllPairs(){
   const p = SAFE_FUNDING_PARAMS;
   const hr = new Date().getUTCHours();
   if(!isEligibleHour(hr)){
     return { scanned: 0, signals: [], reason: 'outside_window', next_window_utc: findNextEligibleHour(hr) };
   }
+  // Lazy-load funding-source so v44-engine remains testable without it
+  let fundingSrc = null;
+  try { fundingSrc = require('./funding-source'); } catch(_) {}
+
   const insufficient = [];
   const errors = [];
   const results = [];
+  let realFundingOk = 0, realFundingFail = 0;
   // 2026-04-28: per-pair diagnostic trail to surface why pairs don't generate
   const skipped_reasons = []; // { sym, reason, funding, z, quality, p20, p80 }
   for (const sym of p.UNIVERSE) {
@@ -907,17 +942,38 @@ async function scanAllPairs(){
         results.push(null);
         continue;
       }
-      // Run evaluation with diagnostic capture
-      const sig = evaluateFundingCarry(sym, bars);
+
+      // 2026-05-01 — REAL funding fetch + alignment to bars1h timestamps
+      let realFundArr = null;
+      let fundingSourceName = 'proxy_ema';
+      if (fundingSrc) {
+        try {
+          const premBars = await fundingSrc.fetchPremiumIndex1h(sym, bars.length);
+          if (premBars && premBars.length > 0) {
+            realFundArr = fundingSrc.alignFundingToBars(bars, premBars);
+            if (realFundArr) {
+              realFundingOk++;
+              fundingSourceName = 'premium_index_real';
+            } else {
+              realFundingFail++;
+            }
+          } else {
+            realFundingFail++;
+          }
+        } catch(_) { realFundingFail++; }
+      }
+
+      // Run evaluation with diagnostic capture; pass real funding when available
+      const sig = evaluateFundingCarry(sym, bars, { realFundArr, fundingSourceName });
       if (sig) {
         results.push(sig);
       } else {
-        // Capture WHY it returned null for diagnostic
+        // Capture WHY it returned null for diagnostic — use the same array used in eval
         try {
           const idx = bars.length - 1;
           const bar = bars[idx];
           const winType = getWindowTypeForHour(new Date(bar.t).getUTCHours());
-          const fundArr = computeFundingProxy(bars);
+          const fundArr = (realFundArr && isFinite(realFundArr[idx])) ? realFundArr : computeFundingProxy(bars);
           const f = fundArr ? fundArr[idx] : NaN;
           const fWin = fundArr ? Array.from(fundArr.slice(Math.max(0, idx - 168), idx)).filter(isFinite) : [];
           const sorted = [...fWin].sort((a, b) => a - b);
@@ -925,12 +981,15 @@ async function scanAllPairs(){
           const p20 = sorted[Math.floor(sorted.length * p.P20_Q)] || 0;
           const z = fundArr ? fundingZScore(fundArr, idx, p.Z_LOOKBACK_H) : NaN;
           const quality = z ? confidenceScore(z, winType) : 0;
+          // Use the floor that matches the funding source for accurate diag
+          const _fPosFl = (fundingSourceName === 'proxy_ema') ? p.F_POS_MIN : p.F_POS_MIN_REAL;
+          const _fNegFl = (fundingSourceName === 'proxy_ema') ? p.F_NEG_MAX : p.F_NEG_MAX_REAL;
           let reason;
           if (!winType) reason = 'no_window_type';
           else if (!fundArr) reason = 'funding_proxy_failed';
           else if (!isFinite(f)) reason = 'funding_not_finite';
           else if (fWin.length < 50) reason = 'funding_window_short';
-          else if (!(f > p80 && f > p.F_POS_MIN) && !(f < p20 && f < p.F_NEG_MAX)) reason = 'funding_not_extreme';
+          else if (!(f > p80 && f > _fPosFl) && !(f < p20 && f < _fNegFl)) reason = 'funding_not_extreme';
           else if (quality < p.QUALITY_THRESHOLD) reason = 'quality_below_threshold';
           else reason = 'cooldown_active_or_other';
           skipped_reasons.push({
@@ -939,7 +998,8 @@ async function scanAllPairs(){
             z: isFinite(z) ? z.toFixed(3) : 'n/a',
             quality: quality ? quality.toFixed(3) : 'n/a',
             p80_thr: p80.toFixed(6),
-            p20_thr: p20.toFixed(6)
+            p20_thr: p20.toFixed(6),
+            funding_source: fundingSourceName
           });
         } catch(_) {}
         results.push(null);
@@ -955,6 +1015,7 @@ async function scanAllPairs(){
     signals,
     window_type: getWindowTypeForHour(hr),
     reason: 'ok',
+    real_funding: { ok: realFundingOk, fail: realFundingFail },
     insufficient_pairs: insufficient.length > 0 ? insufficient : undefined,
     errored_pairs: errors.length > 0 ? errors : undefined,
     skipped_reasons: skipped_reasons.length > 0 ? skipped_reasons : undefined

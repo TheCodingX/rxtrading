@@ -309,6 +309,36 @@ async function onSignalClosed({ signalId, outcome, exitPrice, reason, symbol }) 
 }
 
 /**
+ * 2026-05-07 — Hook called by trade-close propagator cron when a signal_trade closes.
+ * Pushes a per-user 'trade_close' message so the dashboard updates instantly without
+ * requiring a manual refresh or client-side polling. Includes pnl + reason for UI to
+ * render the toast and append to historial.
+ */
+async function onTradeClosed(trade) {
+  try {
+    if (!trade || !trade.keyId || !trade.tradeId) return;
+    pushToUser(trade.keyId, {
+      type: 'trade_close',
+      trade: {
+        trade_id: trade.tradeId,
+        signal_id: trade.signalId,
+        symbol: trade.symbol,
+        direction: trade.direction,
+        mode: trade.mode,
+        close_reason: trade.reason,
+        exit_price: trade.exitPrice,
+        pnl: trade.pnl,
+        engine_version: trade.engineVersion,
+        propagated_from_signal: true
+      },
+      ts: Date.now()
+    });
+  } catch (err) {
+    console.warn('[WS] onTradeClosed err:', err.message);
+  }
+}
+
+/**
  * Hook called by reconciliation cron on divergence detection.
  * Persists a CRITICAL notification for the user.
  */
@@ -337,5 +367,6 @@ module.exports = {
   onNewSignal,
   onSignalExpired,
   onSignalClosed,
+  onTradeClosed,
   onReconcileDivergence
 };

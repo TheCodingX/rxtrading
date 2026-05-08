@@ -23,9 +23,12 @@ const ADVISORY_LOCK_KEY = 0x52585353; // 'RXSS' (RX Signal Store generator)
 
 // 2026-04-27 V44.6 deploy: bump engine version when T6+T5 flags active so DB rows
 // reflect the actual engine that produced them (audit + rollback traceability).
+// 2026-05-01 V44.7: bump to v44.7 — first version using REAL premium-index funding source
+// (instead of the EMA-based proxy that quietly degraded the strategy to coinflip in live).
+// Pre-v44.7 outcomes in the DB should NOT be aggregated with v44.7+ outcomes for WR/PF.
 const _v46_active = process.env.APEX_V46_T6 === '1' && process.env.APEX_V46_T5 === '1';
 const ENGINE_VERSION = process.env.SIGNAL_ENGINE_VERSION ||
-  (_v46_active ? 'apex-v44.6-funding-carry-bayes-hawkes-1.0' : 'apex-v44-funding-carry-1.0');
+  (_v46_active ? 'apex-v44.7-funding-carry-real-bayes-hawkes-1.0' : 'apex-v44.7-funding-carry-real-1.0');
 
 let _timer = null;
 let _running = false;
@@ -71,10 +74,11 @@ async function runScanCycle() {
     };
     // 2026-04-27: log every scan cycle in eligible windows for visibility
     if (scan.reason === 'ok') {
-      console.log(`[SignalGen] scan complete in ${scanMs}ms — scanned=${scan.scanned}, signals_found=${results.signals_found}, window=${scan.window_type}`);
+      const rf = scan.real_funding || { ok: 0, fail: 0 };
+      console.log(`[SignalGen] scan complete in ${scanMs}ms — scanned=${scan.scanned}, signals_found=${results.signals_found}, window=${scan.window_type}, real_funding=${rf.ok}/${rf.ok + rf.fail}`);
       if (results.signals_found > 0) {
         for (const s of scan.signals) {
-          console.log(`[SignalGen]   → ${s.signal} ${s.symbol} conf=${s.confidence} z=${s.funding_zscore?.toFixed(3) || 'n/a'} sizeMult=${s.size_multiplier || 'n/a'}`);
+          console.log(`[SignalGen]   → ${s.signal} ${s.symbol} conf=${s.confidence} z=${s.funding_zscore?.toFixed(3) || 'n/a'} sizeMult=${s.size_multiplier || 'n/a'} src=${s.funding_source || 'n/a'}`);
         }
       } else {
         console.log(`[SignalGen]   no pair passed filters this cycle (z<threshold or funding not extreme)`);
@@ -122,6 +126,7 @@ async function runScanCycle() {
           meta: {
             funding: sig.funding,
             funding_zscore: sig.funding_zscore,
+            funding_source: sig.funding_source, // 2026-05-01: 'premium_index_real' / 'proxy_ema'
             size_multiplier: sig.size_multiplier,
             quality_score: sig.quality_score,
             window_type: sig.window_type,

@@ -818,6 +818,225 @@ app.get(['/health', '/api/health'], async (req, res) => {
   }
   res.status(healthy ? 200 : 503).json(payload);
 });
+// ════════════════════════════════════════════════════════════════════════════
+// 2026-05-07 — Admin endpoints for trade-close emergency / monitoring.
+// ════════════════════════════════════════════════════════════════════════════
+
+// List all currently-open trades across the platform with the parent signal's state.
+// Used by ops dashboard + alerting cron. Trades with signal already closed but still
+// OPEN here are anomalies (the trade-close propagator should have caught them).
+app.get('/api/admin/open-trades', verifyAdminSecret, async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(2000, parseInt(req.query.limit || '500', 10) || 500));
+    const onlyAnomalies = req.query.anomalies_only === '1' || req.query.anomalies_only === 'true';
+    const where = [
+      "t.trade_state IN ('OPEN','PENDING_OPEN','PENDING_CLOSE')"
+    ];
+    if (onlyAnomalies) {
+      // anomaly = signal already closed (state EXPIRED/CANCELED/SUPERSEDED with outcome) OR ttl > 1h ago
+      where.push(`(
+        (s.state IN ('EXPIRED','CANCELED','SUPERSEDED') AND s.outcome IS NOT NULL)
+        OR (s.expires_at IS NOT NULL AND s.expires_at < NOW() - INTERVAL '1 hour')
+      )`);
+    }
+    const sql = `
+      SELECT t.id AS trade_id, t.signal_id, t.key_id, t.mode, t.trade_state,
+             t.open_price, t.opened_at, t.binance_order_id,
+             s.symbol, s.direction, s.entry, s.tp, s.sl, s.confidence,
+             s.state AS signal_state, s.outcome, s.outcome_price, s.expires_at, s.closed_at,
+             s.engine_version,
+             EXTRACT(EPOCH FROM (NOW() - t.opened_at))::INT AS age_seconds,
+             CASE
+               WHEN s.state IN ('EXPIRED','CANCELED','SUPERSEDED') AND s.outcome IS NOT NULL THEN 'signal_closed_trade_open'
+               WHEN s.expires_at < NOW() - INTERVAL '1 hour' THEN 'ttl_passed_grace'
+               WHEN s.expires_at < NOW() THEN 'ttl_passed'
+               ELSE 'normal'
+             END AS anomaly_kind
+        FROM signal_trades t
+        JOIN signals s ON s.signal_id = t.signal_id
+       WHERE ${where.join(' AND ')}
+       ORDER BY t.opened_at ASC NULLS FIRST
+       LIMIT $1
+    `;
+    const { rows } = await pool.query(sql, [limit]);
+    const summary = {
+      total: rows.length,
+      by_mode: {},
+      by_anomaly: {},
+      oldest_age_hours: rows.length ? +(rows[0].age_seconds / 3600).toFixed(1) : 0
+    };
+    for (const r of rows) {
+      summary.by_mode[r.mode] = (summary.by_mode[r.mode] || 0) + 1;
+      summary.by_anomaly[r.anomaly_kind] = (summary.by_anomaly[r.anomaly_kind] || 0) + 1;
+    }
+    res.json({ summary, trades: rows, ts: new Date().toISOString() });
+  } catch (e) {
+    console.error('[admin/open-trades] error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Force-run the trade-close cycle once. Useful immediately after a fix deploy or
+// when on-call wants to drain zombies before next scheduled tick.
+app.post('/api/admin/run-trade-close', verifyAdminSecret, async (req, res) => {
+  try {
+    const r = await signalCron.runTradeCloseCycle();
+    res.json({ ok: true, result: r });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Zombie sweep: close all paper trades whose parent signal already closed (state
+// EXPIRED+outcome) but the trade itself is still OPEN. Idempotent. Only paper to
+// prevent accidentally double-closing real trades that the broker reconcile is
+// authoritative for. Returns a CSV-shaped log of every action for compensation
+// audit.
+app.post('/api/admin/close-zombie-paper-trades', verifyAdminSecret, async (req, res) => {
+  try {
+    const dryRun = req.query.dry_run === '1' || req.query.dry_run === 'true';
+    // Pull zombies
+    const { rows } = await pool.query(`
+      SELECT t.id AS trade_id, t.signal_id, t.key_id, t.open_price, t.opened_at, t.meta AS trade_meta,
+             s.symbol, s.direction, s.entry, s.tp, s.sl, s.outcome, s.outcome_price, s.closed_at,
+             s.engine_version
+        FROM signal_trades t
+        JOIN signals s ON s.signal_id = t.signal_id
+       WHERE t.mode = 'paper'
+         AND t.trade_state IN ('OPEN','PENDING_CLOSE')
+         AND s.state IN ('EXPIRED','CANCELED','SUPERSEDED')
+         AND s.outcome IS NOT NULL
+       ORDER BY t.opened_at ASC
+       LIMIT 5000
+    `);
+    if (rows.length === 0) {
+      return res.json({ ok: true, dry_run: dryRun, zombies_found: 0, closed: 0, actions: [] });
+    }
+    const actions = [];
+    let closedCount = 0;
+    for (const r of rows) {
+      const reason = r.outcome === 'WIN' ? 'TP_HIT' : r.outcome === 'LOSS' ? 'SL_HIT' : 'TIME_STOP';
+      const exitPrice = r.outcome_price != null
+        ? parseFloat(r.outcome_price)
+        : r.outcome === 'WIN' ? parseFloat(r.tp) : r.outcome === 'LOSS' ? parseFloat(r.sl) : parseFloat(r.entry);
+      const m = r.trade_meta || {};
+      const sign = r.direction === 'BUY' ? 1 : -1;
+      const op = parseFloat(r.open_price || r.entry);
+      const pctMove = isFinite(op) && op > 0 ? ((exitPrice - op) / op) * sign : 0;
+      const notional = parseFloat(m.notional || m.quote_amount || m.amt || 0);
+      const lev = parseFloat(m.leverage || m.lev || 1);
+      const pnl = notional > 0 ? +(notional * lev * pctMove).toFixed(8) : null;
+      const action = {
+        trade_id: r.trade_id,
+        signal_id: r.signal_id,
+        key_id: r.key_id,
+        symbol: r.symbol,
+        direction: r.direction,
+        open_price: op,
+        exit_price: exitPrice,
+        outcome: r.outcome,
+        derived_reason: reason,
+        derived_pnl: pnl,
+        zombie_age_sec: Math.round((Date.now() - new Date(r.opened_at).getTime()) / 1000),
+        engine_version: r.engine_version,
+        executed: false
+      };
+      if (!dryRun) {
+        try {
+          const cr = await sigStore.closeTrade({
+            tradeId: r.trade_id,
+            closePrice: exitPrice,
+            closeReason: reason,
+            pnl,
+            meta: { recovered: true, recovery_reason: 'admin_zombie_sweep_2026-05-07', signal_outcome: r.outcome }
+          });
+          action.executed = !!cr.ok;
+          if (cr.ok) closedCount++;
+          else action.error = cr.reason;
+        } catch (e) {
+          action.error = e.message;
+        }
+      }
+      actions.push(action);
+    }
+    res.json({
+      ok: true,
+      dry_run: dryRun,
+      zombies_found: rows.length,
+      closed: closedCount,
+      actions
+    });
+  } catch (e) {
+    console.error('[admin/close-zombie-paper-trades] error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Emergency: close all OPEN trades for a single user (paper + real_*).
+// For real_* this is a DB-only mark — does NOT cancel/close at the exchange.
+// Use POST /api/broker/reconcile or `closeAllPositions` for that side.
+app.post('/api/admin/close-user-trades/:keyId', verifyAdminSecret, async (req, res) => {
+  try {
+    const keyId = parseInt(req.params.keyId, 10);
+    if (!Number.isFinite(keyId)) return res.status(400).json({ error: 'invalid_keyId' });
+    const reason = (req.body && req.body.reason) || 'ADMIN_OVERRIDE';
+    const { rows } = await pool.query(
+      `SELECT id, signal_id, mode FROM signal_trades
+        WHERE key_id = $1 AND trade_state IN ('OPEN','PENDING_OPEN','PENDING_CLOSE')`,
+      [keyId]
+    );
+    let closed = 0;
+    for (const r of rows) {
+      const cr = await sigStore.closeTrade({
+        tradeId: r.id,
+        closePrice: null,
+        closeReason: reason,
+        pnl: null,
+        meta: { admin_force_close: true, ts: new Date().toISOString() }
+      });
+      if (cr.ok) closed++;
+    }
+    res.json({ ok: true, key_id: keyId, eligible: rows.length, closed, reason });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Global kill-switch — blocks new operate calls without touching open trades.
+// Stored in a runtime flag (in-memory; persistence via env or DB if needed later).
+let _autotradePausedFlag = false;
+function isAutotradePaused() { return _autotradePausedFlag; }
+app.post('/api/admin/pause-autotrade', verifyAdminSecret, (req, res) => {
+  _autotradePausedFlag = true;
+  console.warn('[admin] AUTOTRADE PAUSED globally at', new Date().toISOString());
+  res.json({ ok: true, paused: true });
+});
+app.post('/api/admin/resume-autotrade', verifyAdminSecret, (req, res) => {
+  _autotradePausedFlag = false;
+  console.log('[admin] autotrade resumed at', new Date().toISOString());
+  res.json({ ok: true, paused: false });
+});
+app.get('/api/admin/autotrade-status', verifyAdminSecret, (req, res) => {
+  res.json({ paused: _autotradePausedFlag, ts: new Date().toISOString() });
+});
+
+// 2026-05-07 — V44.7 live health check endpoint (admin only).
+// Returns identical payload to scripts/health-check-v447.js so dashboard and
+// alerting cron always agree. Query: ?days=N (default 30).
+app.get('/api/admin/health-v447', verifyAdminSecret, async (req, res) => {
+  try {
+    const { computeHealthReport } = require('./health-v447');
+    const days = Math.max(1, Math.min(365, parseInt(req.query.days || '30', 10) || 30));
+    const engineLike = (typeof req.query.engine === 'string' && req.query.engine) || 'apex-v44.7%';
+    const feeBps = parseFloat(req.query.fee_bps || process.env.HEALTH_FEE_BPS || '8');
+    const report = await computeHealthReport({ days, engineLike, feeBps });
+    res.json(report);
+  } catch (e) {
+    console.error('[health-v447] error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Admin metrics endpoint (protected)
 app.get('/api/admin/metrics', verifyAdminSecret, (req, res) => {
   const mem = process.memoryUsage();
@@ -899,7 +1118,13 @@ app.get('/api/v44/diag', async (req, res) => {
       probe('coingecko',    'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=40&interval=hourly', (j) => j?.prices?.length || 0),
       probe('cryptocompare','https://min-api.cryptocompare.com/data/v2/histohour?fsym=BTC&tsym=USDT&limit=800', (j) => j?.Data?.Data?.length || 0),
       probe('binance-spot', 'https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=800', (j) => Array.isArray(j) ? j.length : 0),
-      probe('okx',          'https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1H&limit=300', (j) => j?.data?.length || 0)
+      probe('okx',          'https://www.okx.com/api/v5/market/candles?instId=BTC-USDT-SWAP&bar=1H&limit=300', (j) => j?.data?.length || 0),
+      // 2026-05-01: REAL funding/premium-index sources used by v44.7
+      probe('binance-prem', 'https://fapi.binance.com/fapi/v1/premiumIndexKlines?symbol=BTCUSDT&interval=1h&limit=800', (j) => Array.isArray(j) ? j.length : 0),
+      probe('binance-fund', 'https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&limit=200', (j) => Array.isArray(j) ? j.length : 0),
+      probe('okx-fund',     'https://www.okx.com/api/v5/public/funding-rate-history?instId=BTC-USDT-SWAP&limit=100', (j) => j?.data?.length || 0),
+      probe('bybit-prem',   'https://api.bybit.com/v5/market/premium-index-price-kline?category=linear&symbol=BTCUSDT&interval=60&limit=200', (j) => j?.result?.list?.length || 0),
+      probe('bybit-fund',   'https://api.bybit.com/v5/market/funding/history?category=linear&symbol=BTCUSDT&limit=200', (j) => j?.result?.list?.length || 0)
     ]);
 
     // 2026-04-28: full=1 is CACHE-ONLY. Doesn't trigger real fetches (would timeout
@@ -990,6 +1215,8 @@ app.get('/api/v44/diag', async (req, res) => {
         QUALITY_THRESHOLD: v44.SAFE_FUNDING_PARAMS.QUALITY_THRESHOLD,
         F_POS_MIN: v44.SAFE_FUNDING_PARAMS.F_POS_MIN,
         F_NEG_MAX: v44.SAFE_FUNDING_PARAMS.F_NEG_MAX,
+        F_POS_MIN_REAL: v44.SAFE_FUNDING_PARAMS.F_POS_MIN_REAL,
+        F_NEG_MAX_REAL: v44.SAFE_FUNDING_PARAMS.F_NEG_MAX_REAL,
         SETTLEMENT_HOURS: v44.SAFE_FUNDING_PARAMS.SETTLEMENT_HOURS,
         TP_BPS: v44.SAFE_FUNDING_PARAMS.TP_BPS,
         SL_BPS: v44.SAFE_FUNDING_PARAMS.SL_BPS,
@@ -1020,6 +1247,57 @@ app.post('/api/admin/v44/force-scan', verifyAdminSecret, async (req, res) => {
     res.json({ ok: true, result, ts: Date.now() });
   } catch (err) {
     res.status(500).json({ error: 'force_scan_failed', message: err.message });
+  }
+});
+
+// 2026-05-01: force schema migration for outcome columns + cleanup duplicates.
+// Use when boot migration silently fails. Reports actual schema state + counts.
+app.post('/api/admin/db/force-migration', verifyAdminSecret, async (req, res) => {
+  const results = { steps: [], errors: [] };
+  const run = async (label, sql) => {
+    try {
+      await pool.query(sql);
+      results.steps.push({ label, ok: true });
+    } catch (err) {
+      results.errors.push({ label, error: err.message });
+      results.steps.push({ label, ok: false, error: err.message.slice(0, 200) });
+    }
+  };
+  try {
+    await run('add_outcome', `ALTER TABLE signals ADD COLUMN IF NOT EXISTS outcome TEXT DEFAULT NULL`);
+    await run('add_outcome_price', `ALTER TABLE signals ADD COLUMN IF NOT EXISTS outcome_price NUMERIC(20,8) DEFAULT NULL`);
+    await run('add_closed_at', `ALTER TABLE signals ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ DEFAULT NULL`);
+    await run('idx_outcome', `CREATE INDEX IF NOT EXISTS idx_signals_outcome ON signals(outcome) WHERE outcome IS NOT NULL`);
+    await run('cleanup_dups', `WITH ranked AS (
+      SELECT id, signal_id,
+        ROW_NUMBER() OVER (PARTITION BY symbol, direction, engine_version
+                           ORDER BY ts DESC, id DESC) AS rn
+      FROM signals WHERE state = 'ACTIVE'
+    )
+    UPDATE signals
+    SET state = 'SUPERSEDED',
+        state_changed_at = NOW(),
+        closed_at = COALESCE(closed_at, NOW())
+    WHERE id IN (SELECT id FROM ranked WHERE rn > 1)`);
+    // Verify schema
+    const colCheck = await pool.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'signals' AND column_name IN ('outcome','outcome_price','closed_at')
+    `);
+    results.columns_present = colCheck.rows.map(r => r.column_name);
+    // Count signal states
+    const stateCounts = await pool.query(`
+      SELECT state, COUNT(*)::int as c FROM signals GROUP BY state
+    `);
+    results.states = Object.fromEntries(stateCounts.rows.map(r => [r.state, r.c]));
+    // Count outcomes
+    const outcomeCounts = await pool.query(`
+      SELECT COALESCE(outcome, 'PENDING') as o, COUNT(*)::int as c FROM signals GROUP BY outcome
+    `);
+    results.outcomes = Object.fromEntries(outcomeCounts.rows.map(r => [r.o, r.c]));
+    res.json({ ok: results.errors.length === 0, ...results });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: 'migration_failed', message: err.message, ...results });
   }
 });
 
@@ -1114,6 +1392,12 @@ app.get('/api/signals/events', async (req, res) => {
 // Returns { ok: true, trade } if claimed; { ok: false, reason } otherwise.
 app.post('/api/signals/:signalId/operate', verifyOriginMiddleware, verifyToken, async (req, res) => {
   try {
+    // 2026-05-07: respect global autotrade pause kill-switch (admin can flip via
+    // /api/admin/pause-autotrade in case of incident). Paper trades are also paused
+    // since the trade-close cron applies to all modes.
+    if (typeof isAutotradePaused === 'function' && isAutotradePaused()) {
+      return res.status(503).json({ error: 'autotrade_paused', message: 'Autotrade is globally paused for maintenance.' });
+    }
     const signalId = req.params.signalId;
     const { mode = 'paper', openPrice } = req.body || {};
     const keyId = req.license.keyId;
@@ -3329,9 +3613,74 @@ async function start() {
         signalCron.start({
           onSignalExpired: wsServer.onSignalExpired,
           onSignalClosed: wsServer.onSignalClosed, // 2026-04-29: TP/SL hits broadcast outcome
-          onReconcileDivergence: wsServer.onReconcileDivergence
+          // 2026-05-07: trade close propagator → notif user + WS broadcast
+          onTradeClosed: async (trade) => {
+            try {
+              const sevMap = {
+                TP_HIT: 'HIGH',
+                SL_HIT: 'HIGH',
+                TIME_STOP: 'MEDIUM',
+                TRAILING_STOP_HIT: 'MEDIUM',
+                MANUAL_CLOSE: 'LOW',
+                RECONCILE_EXTERNAL: 'HIGH',
+                ADMIN_OVERRIDE: 'CRITICAL',
+                EXCHANGE_LIQUIDATION: 'CRITICAL',
+                SAFETY_GATE_DAILY_LOSS: 'CRITICAL',
+                SAFETY_GATE_DD: 'CRITICAL',
+                SAFETY_GATE_CIRCUIT_BREAKER: 'CRITICAL',
+                SIGNAL_SUPERSEDED: 'LOW'
+              };
+              const sev = sevMap[trade.reason] || 'MEDIUM';
+              const pnlStr = trade.pnl != null ? `${trade.pnl >= 0 ? '+' : ''}$${Number(trade.pnl).toFixed(2)}` : 's/d';
+              const reasonLabel = (trade.reason || 'CLOSE').replace(/_/g, ' ');
+              await notifStore.insert({
+                keyId: trade.keyId,
+                eventType: 'trade_close',
+                severity: sev,
+                title: `Trade cerrado · ${reasonLabel}`,
+                body: `${trade.symbol} ${trade.direction} · ${pnlStr} · modo ${trade.mode}`,
+                refKey: `trade-close-${trade.tradeId}`,
+                meta: {
+                  trade_id: trade.tradeId,
+                  signal_id: trade.signalId,
+                  close_reason: trade.reason,
+                  pnl: trade.pnl,
+                  mode: trade.mode,
+                  symbol: trade.symbol,
+                  exit_price: trade.exitPrice,
+                  propagated_by: 'trade_close_cron'
+                }
+              });
+            } catch (e) {
+              console.warn('[Startup] notif on trade close failed:', e.message);
+            }
+            // Propagate to WS so the user dashboard updates instantly without polling
+            try {
+              if (wsServer.onTradeClosed) await wsServer.onTradeClosed(trade);
+            } catch (_) {}
+          },
+          onReconcileDivergence: async (div) => {
+            // 2026-05-07: surface divergence to admin dashboard + add an in-app notif
+            // for the affected user so they're aware their broker state mismatches.
+            try { if (wsServer.onReconcileDivergence) await wsServer.onReconcileDivergence(div); } catch (_) {}
+            try {
+              if (div && div.keyId) {
+                await notifStore.insert({
+                  keyId: div.keyId,
+                  eventType: 'broker_divergence',
+                  severity: 'CRITICAL',
+                  title: `Discrepancia broker · ${div.position?.symbol || 'posición externa'}`,
+                  body: `Detectamos una posición en tu cuenta de Binance sin trade asociado en RX. Verificá manualmente o pausá autotrade.`,
+                  refKey: `divergence-${div.keyId}-${div.position?.symbol || 'na'}-${Date.now()}`,
+                  meta: { position: div.position, detected_at: new Date().toISOString() }
+                });
+              }
+            } catch (e) {
+              console.warn('[Startup] notif on divergence failed:', e.message);
+            }
+          }
         });
-        console.log('[Startup] Signal System v2 active (DB-backed + WS + crons)');
+        console.log('[Startup] Signal System v2 active (DB-backed + WS + crons + trade close propagator)');
       } catch(e) {
         console.error('[Startup] Signal System v2 init failed:', e.message);
       }

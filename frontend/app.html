@@ -4615,7 +4615,7 @@ body.is-vip-mode #CR {
               </div>
             </div>
             <div class="ami-disclaimer" data-i18n-key="ami_disclaimer">
-              Esta información es analítica, no predictiva. No constituye asesoramiento financiero. Datos obtenidos de fuentes públicas (Binance, alternative.me) y procesados en tu navegador.
+              Esta información es analítica, no predictiva. No constituye asesoramiento financiero. Datos públicos de mercado procesados en tu navegador.
             </div>
           </div>
           <style>
@@ -5565,7 +5565,7 @@ body.is-vip-mode #CR {
           <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,215,0,.5);margin-top:4px;">Backtest histórico verificado con datos de Binance</div>
         </div>
         <!-- Verified by Binance badge -->
-        <div class="binance-verified-badge" title="Data verified with Binance REST API">
+        <div class="binance-verified-badge" title="Datos verificados con Binance">
           <div class="bvb-pulse"></div>
           <div class="bvb-icon">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -5791,7 +5791,7 @@ body.is-vip-mode #CR {
           <div style="font-family:'Orbitron',monospace;font-size:10px;letter-spacing:2px;color:rgba(255,215,0,.8)">METODOLOGÍA DE BACKTESTING</div>
         </div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(255,255,255,.65);line-height:1.8;">
-          <div>&#x2713; Datos 100% reales descargados en vivo de la REST API de Binance (velas 5m, 15m y 1h).</div>
+          <div>&#x2713; Datos reales de mercado verificados (velas 5m, 15m y 1h).</div>
           <div>&#x2713; Sin look-ahead bias: cada señal se genera solo con datos disponibles hasta el momento de la vela.</div>
           <div>&#x2713; Resolución precisa de TP/SL en la misma vela usando el precio de apertura para determinar el primer hit.</div>
           <div>&#x2713; Motor idéntico al que corre en producción — mismos indicadores, mismos umbrales, mismos filtros.</div>
@@ -6229,7 +6229,7 @@ body.is-vip-mode #CR {
         </div>
         <div class="aii-disclaimer">
           <b>Transparencia:</b>
-          Esta sección no predice dirección de precio. Agrega datos públicos de mercado en tiempo real (Binance, alternative.me) y deriva contexto. No constituye asesoramiento financiero ni garantía de resultados.
+          Esta sección no predice dirección de precio. Agrega datos públicos de mercado en tiempo real y deriva contexto. No constituye asesoramiento financiero ni garantía de resultados.
         </div>
       </div>
     </section>
@@ -8758,17 +8758,16 @@ let vipSignalMode = 'strict'; // 2026-04-22: APEX rebrand — 'strict' mode inte
 let _signalLock = null; // { sym, signal, conf, entry, tp, sl, time, mode, expiresAt }
 const SIGNAL_LOCK_DURATION = 5 * 60 * 1000; // 5 minutes
 
-// Daily performance — resets every 24h, seeded with base stats
+// Daily performance — resets every 24h. 2026-05-01: removed fake-randomized seeding;
+// counts are now real (incremented from operated trades only). New days start at zero.
 const ACC_DAILY_KEY = 'rxtrading_acc_daily';
 function loadDailyAcc(){
   try{
     const stored = JSON.parse(localStorage.getItem(ACC_DAILY_KEY)||'{}');
     const today = new Date().toISOString().slice(0,10);
     if(stored.date === today) return stored;
-    // New day — seed with slightly randomized base stats
-    const w=Math.floor(44+Math.random()*7), l=Math.floor(4+Math.random()*5);
-    return {date:today, wins:w, losses:l, total:w+l};
-  }catch(e){ const w=Math.floor(44+Math.random()*7), l=Math.floor(4+Math.random()*5); return {date:new Date().toISOString().slice(0,10), wins:w, losses:l, total:w+l}; }
+    return {date:today, wins:0, losses:0, total:0};
+  }catch(e){ return {date:new Date().toISOString().slice(0,10), wins:0, losses:0, total:0}; }
 }
 function saveDailyAcc(){ localStorage.setItem(ACC_DAILY_KEY, JSON.stringify(accData)); }
 let accData = loadDailyAcc();
@@ -17101,6 +17100,7 @@ async function rxResetAndSyncSigStats(){
       sigHistoryData = recentSigs.signals.map(s => {
         const trade = tradedMap[s.signal_id];
         // Determine result based on signal state + trade state if exists
+        // 2026-05-01: include backend signals.outcome (WIN/LOSS/NO_HIT) when no operated trade
         let result = 'OPEN';
         let exitPrice = 0, pnl = 0, closeReason = null, closedAt = null;
         if (trade) {
@@ -17113,8 +17113,19 @@ async function rxResetAndSyncSigStats(){
           } else if (trade.trade_state === 'OPEN' || trade.trade_state === 'PENDING_OPEN') {
             result = 'TRADED';
           }
-        } else if (s.state === 'EXPIRED') {
+        } else if (s.outcome === 'WIN') {
+          result = 'WIN';
+          exitPrice = Number(s.outcome_price || 0);
+          closedAt = s.closed_at;
+          closeReason = 'TP_HIT';
+        } else if (s.outcome === 'LOSS') {
+          result = 'LOSS';
+          exitPrice = Number(s.outcome_price || 0);
+          closedAt = s.closed_at;
+          closeReason = 'SL_HIT';
+        } else if (s.outcome === 'NO_HIT' || s.state === 'EXPIRED') {
           result = 'EXPIRED';
+          closedAt = s.closed_at;
         } else if (s.state === 'SUPERSEDED') {
           result = 'SUPERSEDED';
         } else if (s.state === 'CANCELED') {
@@ -19910,7 +19921,7 @@ const DICT_ES_EN = {
   'VENTAS':'SELLS',
   'COMPRAS':'BUYS',
   'Transparencia:':'Transparency:',
-  'Esta sección no predice dirección de precio. Agrega datos públicos de mercado en tiempo real (Binance, alternative.me) y deriva contexto. No constituye asesoramiento financiero ni garantía de resultados.':'This section does not predict price direction. It aggregates real-time public market data (Binance, alternative.me) and derives context. It is not financial advice nor a guarantee of results.',
+  'Esta sección no predice dirección de precio. Agrega datos públicos de mercado en tiempo real y deriva contexto. No constituye asesoramiento financiero ni garantía de resultados.':'This section does not predict price direction. It aggregates real-time public market data and derives context. It is not financial advice nor a guarantee of results.',
   'AI INTEL ES UNA FUNCIÓN VIP — INGRESA TU CÓDIGO':'AI INTEL IS A VIP FEATURE — ENTER YOUR CODE',
   'Iniciar sesión':'Sign in',
   'Iniciar sesion':'Sign in',
@@ -20118,7 +20129,7 @@ const DICT_ES_EN = {
   'RESULTADOS':'RESULTS',
   'RESULTADOS REALES':'REAL RESULTS',
   'Backtest histórico verificado con datos de Binance':'Historical backtest verified with Binance data',
-  'Data verified with Binance REST API':'Data verified with Binance REST API',
+  'Datos verificados con Binance':'Data verified with Binance',
   'VERIFIED BY':'VERIFIED BY',
   'MOTOR GANADOR — 150 DÍAS REAL BINANCE':'WINNER MOTOR — 150 DAYS REAL BINANCE',
   'PnL Total':'Total PnL',
@@ -20136,8 +20147,8 @@ const DICT_ES_EN = {
   'GANADOR':'WINNER',
   'ALTA FRECUENCIA':'HIGH FREQUENCY',
   'Capital inicial: $10,000 · Trade size: $500 × 5× leverage · Periodo: 150 días':'Initial capital: $10,000 · Trade size: $500 × 5× leverage · Period: 150 days',
-  '\u2713 Sin look-ahead bias · Datos reales Binance':'\u2713 No look-ahead bias · Real Binance data',
-  'Sin look-ahead bias · Datos reales Binance':'No look-ahead bias · Real Binance data',
+  '\u2713 Sin look-ahead bias · Datos reales':'\u2713 No look-ahead bias · Real market data',
+  'Sin look-ahead bias · Datos reales':'No look-ahead bias · Real market data',
   'BACKTEST INTERACTIVO':'INTERACTIVE BACKTEST',
   'MOTOR':'MOTOR',
   'PERIODO':'PERIOD',
@@ -20156,7 +20167,7 @@ const DICT_ES_EN = {
   'DISTRIBUCIÓN WIN / LOSS':'WIN / LOSS DISTRIBUTION',
   'Seleccioná motor y periodo, luego ejecutá el backtest':'Select motor and period, then run the backtest',
   'METODOLOGÍA DE BACKTESTING':'BACKTESTING METHODOLOGY',
-  '\u2713 Datos 100% reales descargados en vivo de la REST API de Binance (velas 5m, 15m y 1h).':'\u2713 100% real data downloaded live from the Binance REST API (5m, 15m and 1h candles).',
+  '\u2713 Datos reales de mercado verificados (velas 5m, 15m y 1h).':'\u2713 Verified real market data (5m, 15m and 1h candles).',
   '\u2713 Sin look-ahead bias: cada señal se genera solo con datos disponibles hasta el momento de la vela.':'\u2713 No look-ahead bias: each signal is generated using only data available up to that candle.',
   '\u2713 Resolución precisa de TP/SL en la misma vela usando el precio de apertura para determinar el primer hit.':'\u2713 Precise TP/SL resolution within the same candle using the open price to determine which was hit first.',
   '\u2713 Motor idéntico al que corre en producción — mismos indicadores, mismos umbrales, mismos filtros.':'\u2713 Engine identical to the one running in production — same indicators, same thresholds, same filters.',
@@ -20994,7 +21005,7 @@ const DICT_ES_EN = {
   'Señales/día':'Signals/day',
   'APEX v42 PRO+: Capital $500 · $2500 pos. × 5× lev · 15 pares filtrados · SPX macro filter · Walk-forward OOS 274d':
   'APEX v42 PRO+: Capital $500 · $2500 pos. × 5× lev · 15 filtered pairs · SPX macro filter · 274d OOS walk-forward',
-  '[OK] Sin look-ahead bias · Datos reales Binance Data Vision':'[OK] No look-ahead bias · Real Binance Data Vision data',
+  '[OK] Sin look-ahead bias · Datos reales':'[OK] No look-ahead bias · Real market data',
   'Motor':'Engine','PnL Total':'Total PnL','Trades':'Trades','Max DD':'Max DD','Señales/Día':'Signals/Day',
   'GANADOR':'WINNER',
   'Motor VIP Principal':'Main VIP Engine',
@@ -24795,7 +24806,7 @@ document.addEventListener('keydown', (e) => {
       }).join('');
     }catch(e){
       const host = document.getElementById('aii-fund-list');
-      if(host) host.innerHTML = '<div style="text-align:center;padding:16px;color:rgba(255,58,58,.6);font-family:\'JetBrains Mono\',monospace;font-size:10px">Binance API unavailable. Retrying.</div>';
+      if(host) host.innerHTML = '<div style="text-align:center;padding:16px;color:rgba(255,58,58,.6);font-family:\'JetBrains Mono\',monospace;font-size:10px">Datos no disponibles. Reintentando.</div>';
     }
   }
 
@@ -25188,7 +25199,7 @@ document.addEventListener('keydown', (e) => {
           </div>
         </div>`;
     }catch(e){
-      body.innerHTML = `<div class="aii-swing-empty"><div class="aii-swing-empty-icon" style="color:#ff6a6a">⚠</div><div class="aii-swing-empty-t" style="color:#ff6a6a">Error al analizar</div><div class="aii-swing-empty-s">${e.message || 'Binance API timeout. Reintentá.'}</div></div>`;
+      body.innerHTML = `<div class="aii-swing-empty"><div class="aii-swing-empty-icon" style="color:#ff6a6a">⚠</div><div class="aii-swing-empty-t" style="color:#ff6a6a">Error al analizar</div><div class="aii-swing-empty-s">${e.message || 'Tiempo de espera agotado. Reintentá.'}</div></div>`;
     } finally { _swingBusy = false; }
   }
 
