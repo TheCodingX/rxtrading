@@ -1020,6 +1020,138 @@ app.get('/api/admin/autotrade-status', verifyAdminSecret, (req, res) => {
   res.json({ paused: _autotradePausedFlag, ts: new Date().toISOString() });
 });
 
+// 2026-05-08 — Hard purge of pre-V44.7 signals + cascading rows.
+//
+// Removes everything related to engines that are not the current V44.7 family
+// so the historial / stats start clean and only show the new engine.
+//
+// What it deletes (matched by signals.engine_version NOT LIKE 'apex-v44.7-%'):
+//   1. signal_trades rows (cascade via FK ON DELETE CASCADE on signal_id)
+//   2. signal_events rows (orphan rows with no matching signal — cleaned after)
+//   3. signals rows themselves
+//
+// Always run with ?dry_run=1 first to see counts. Without dry_run it COMMITS the
+// delete in a single transaction. Idempotent: re-running on a clean DB is no-op.
+//
+// What it does NOT touch:
+//   • user_paper_data (per-user paper history in localStorage-mirror table) —
+//     the user can use Reset+Sync from the UI to wipe that side.
+//   • notifications — kept for audit. They reference signal_id by string only,
+//     no FK, so they're harmless leftovers.
+//   • license_keys / payments / broker_configs — unrelated.
+app.post('/api/admin/db/purge-non-v447', verifyAdminSecret, async (req, res) => {
+  const dryRun = req.query.dry_run === '1' || req.query.dry_run === 'true';
+  const enginePrefix = (typeof req.query.keep_prefix === 'string' && req.query.keep_prefix) || 'apex-v44.7-%';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Counts BEFORE
+    const beforeSig = await client.query(
+      `SELECT COUNT(*)::int AS n FROM signals WHERE engine_version NOT LIKE $1`,
+      [enginePrefix]
+    );
+    const beforeTrades = await client.query(
+      `SELECT COUNT(*)::int AS n FROM signal_trades t
+        WHERE EXISTS (
+          SELECT 1 FROM signals s
+           WHERE s.signal_id = t.signal_id AND s.engine_version NOT LIKE $1
+        )`,
+      [enginePrefix]
+    );
+    const beforeEvents = await client.query(
+      `SELECT COUNT(*)::int AS n FROM signal_events e
+        WHERE EXISTS (
+          SELECT 1 FROM signals s
+           WHERE s.signal_id = e.signal_id AND s.engine_version NOT LIKE $1
+        )`,
+      [enginePrefix]
+    );
+    // Engine version distribution (for the report)
+    const engBreakdown = await client.query(
+      `SELECT engine_version, COUNT(*)::int AS n FROM signals
+        GROUP BY engine_version ORDER BY n DESC`
+    );
+    // Outcome breakdown of what would be deleted
+    const outcomeBreakdown = await client.query(
+      `SELECT COALESCE(outcome, 'PENDING') AS o, COUNT(*)::int AS n
+         FROM signals WHERE engine_version NOT LIKE $1
+        GROUP BY outcome`,
+      [enginePrefix]
+    );
+
+    const report = {
+      dry_run: dryRun,
+      keep_prefix: enginePrefix,
+      engine_version_distribution: Object.fromEntries(
+        engBreakdown.rows.map(r => [r.engine_version, r.n])
+      ),
+      will_delete: {
+        signals: beforeSig.rows[0].n,
+        signal_trades: beforeTrades.rows[0].n,
+        signal_events: beforeEvents.rows[0].n,
+        signals_by_outcome: Object.fromEntries(
+          outcomeBreakdown.rows.map(r => [r.o, r.n])
+        )
+      }
+    };
+
+    if (dryRun) {
+      await client.query('ROLLBACK');
+      return res.json({ ok: true, ...report, message: 'DRY RUN — nothing was deleted. Re-call without ?dry_run=1 to execute.' });
+    }
+
+    // EXECUTE — order matters. signal_trades has ON DELETE CASCADE on signal_id, so
+    // deleting signals will cascade. signal_events has no FK so we delete by JOIN first.
+    const delEvents = await client.query(
+      `DELETE FROM signal_events
+        WHERE signal_id IN (
+          SELECT signal_id FROM signals WHERE engine_version NOT LIKE $1
+        )`,
+      [enginePrefix]
+    );
+    const delSignals = await client.query(
+      `DELETE FROM signals WHERE engine_version NOT LIKE $1`,
+      [enginePrefix]
+    );
+    // After signals deletion, signal_trades that pointed to them are gone via CASCADE.
+    // But a trade could have been orphaned previously (signal_id without matching signal).
+    // Defensive cleanup of any remaining orphans:
+    const delOrphanTrades = await client.query(
+      `DELETE FROM signal_trades
+        WHERE signal_id NOT IN (SELECT signal_id FROM signals)`
+    );
+
+    // Counts AFTER
+    const afterSig = await client.query(`SELECT COUNT(*)::int AS n FROM signals`);
+    const afterTrades = await client.query(`SELECT COUNT(*)::int AS n FROM signal_trades`);
+    const afterEvents = await client.query(`SELECT COUNT(*)::int AS n FROM signal_events`);
+    await client.query('COMMIT');
+
+    console.warn(`[admin/purge-non-v447] DELETED — signals=${delSignals.rowCount}, events=${delEvents.rowCount}, orphan_trades=${delOrphanTrades.rowCount} · keep_prefix=${enginePrefix}`);
+
+    return res.json({
+      ok: true,
+      ...report,
+      deleted: {
+        signals: delSignals.rowCount,
+        signal_events: delEvents.rowCount,
+        orphan_trades: delOrphanTrades.rowCount
+      },
+      remaining: {
+        signals: afterSig.rows[0].n,
+        signal_trades: afterTrades.rows[0].n,
+        signal_events: afterEvents.rows[0].n
+      }
+    });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error('[admin/purge-non-v447] error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 // 2026-05-07 — V44.7 live health check endpoint (admin only).
 // Returns identical payload to scripts/health-check-v447.js so dashboard and
 // alerting cron always agree. Query: ?days=N (default 30).
@@ -1247,57 +1379,6 @@ app.post('/api/admin/v44/force-scan', verifyAdminSecret, async (req, res) => {
     res.json({ ok: true, result, ts: Date.now() });
   } catch (err) {
     res.status(500).json({ error: 'force_scan_failed', message: err.message });
-  }
-});
-
-// 2026-05-01: force schema migration for outcome columns + cleanup duplicates.
-// Use when boot migration silently fails. Reports actual schema state + counts.
-app.post('/api/admin/db/force-migration', verifyAdminSecret, async (req, res) => {
-  const results = { steps: [], errors: [] };
-  const run = async (label, sql) => {
-    try {
-      await pool.query(sql);
-      results.steps.push({ label, ok: true });
-    } catch (err) {
-      results.errors.push({ label, error: err.message });
-      results.steps.push({ label, ok: false, error: err.message.slice(0, 200) });
-    }
-  };
-  try {
-    await run('add_outcome', `ALTER TABLE signals ADD COLUMN IF NOT EXISTS outcome TEXT DEFAULT NULL`);
-    await run('add_outcome_price', `ALTER TABLE signals ADD COLUMN IF NOT EXISTS outcome_price NUMERIC(20,8) DEFAULT NULL`);
-    await run('add_closed_at', `ALTER TABLE signals ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ DEFAULT NULL`);
-    await run('idx_outcome', `CREATE INDEX IF NOT EXISTS idx_signals_outcome ON signals(outcome) WHERE outcome IS NOT NULL`);
-    await run('cleanup_dups', `WITH ranked AS (
-      SELECT id, signal_id,
-        ROW_NUMBER() OVER (PARTITION BY symbol, direction, engine_version
-                           ORDER BY ts DESC, id DESC) AS rn
-      FROM signals WHERE state = 'ACTIVE'
-    )
-    UPDATE signals
-    SET state = 'SUPERSEDED',
-        state_changed_at = NOW(),
-        closed_at = COALESCE(closed_at, NOW())
-    WHERE id IN (SELECT id FROM ranked WHERE rn > 1)`);
-    // Verify schema
-    const colCheck = await pool.query(`
-      SELECT column_name FROM information_schema.columns
-      WHERE table_name = 'signals' AND column_name IN ('outcome','outcome_price','closed_at')
-    `);
-    results.columns_present = colCheck.rows.map(r => r.column_name);
-    // Count signal states
-    const stateCounts = await pool.query(`
-      SELECT state, COUNT(*)::int as c FROM signals GROUP BY state
-    `);
-    results.states = Object.fromEntries(stateCounts.rows.map(r => [r.state, r.c]));
-    // Count outcomes
-    const outcomeCounts = await pool.query(`
-      SELECT COALESCE(outcome, 'PENDING') as o, COUNT(*)::int as c FROM signals GROUP BY outcome
-    `);
-    results.outcomes = Object.fromEntries(outcomeCounts.rows.map(r => [r.o, r.c]));
-    res.json({ ok: results.errors.length === 0, ...results });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: 'migration_failed', message: err.message, ...results });
   }
 });
 
