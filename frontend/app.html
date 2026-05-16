@@ -3720,44 +3720,16 @@ body.is-vip-mode #CR {
       </div>
       <div id="pub-schedule-status"></div>
       <div id="psigs"></div>
-      <!-- SIGNAL HISTORY TABLE -->
-      <div class="card" style="padding:14px;margin-top:14px;">
-        <div class="stit" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">HISTORIAL DE SEÑALES <span id="sig-accuracy-rate" style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;margin-left:10px;padding:2px 8px;border-radius:4px;background:rgba(0,255,65,.08);border:1px solid rgba(0,255,65,.2);color:#00ff41"></span>
-          <!-- 2026-04-23: engine filter pills — muestra results del motor seleccionado -->
-          <div class="sig-hist-filters" style="display:inline-flex;gap:4px;margin-left:8px;padding:3px;background:rgba(0,0,0,.35);border:1px solid rgba(255,215,0,.18);border-radius:7px;">
-            <button class="sig-hist-filter-btn active" data-filter="all" onclick="setSigHistoryEngineFilter('all')">TODOS</button>
-            <button class="sig-hist-filter-btn" data-filter="apex" onclick="setSigHistoryEngineFilter('apex')">APEX</button>
-            <button class="sig-hist-filter-btn" data-filter="core" onclick="setSigHistoryEngineFilter('core')">CORE</button>
-          </div>
-          <button class="tbtn tb-n" onclick="shareSignal()" style="font-size:7px;padding:4px 8px;height:auto;margin-left:8px" title="Compartir última señal">COMPARTIR</button>
-          <button class="tbtn tb-n" onclick="rxResetAndSyncSigStats()" style="font-size:7px;padding:4px 8px;height:auto;margin-left:8px;border-color:rgba(255,138,0,.5);color:#ff8a00" title="Limpia stats locales corruptas y sincroniza desde server">↻ RESET + SYNC</button>
-          <button class="tbtn tb-n" onclick="exportSigHistory()" style="font-size:7px;padding:4px 8px;height:auto;margin-left:auto">EXPORTAR CSV</button></div>
-        <style>
-          .sig-hist-filter-btn{background:transparent;border:1px solid transparent;color:rgba(255,255,255,.5);font-family:'Orbitron',monospace;font-size:8px;font-weight:900;letter-spacing:1.2px;padding:4px 9px;border-radius:4px;cursor:pointer;transition:all .22s cubic-bezier(.16,1,.3,1);}
-          .sig-hist-filter-btn:hover{color:rgba(255,255,255,.85);background:rgba(255,255,255,.04);}
-          .sig-hist-filter-btn.active[data-filter="all"]{background:linear-gradient(135deg,rgba(255,215,0,.18),rgba(255,138,0,.08));border-color:rgba(255,215,0,.55);color:var(--g);box-shadow:0 0 10px rgba(255,215,0,.2);}
-          .sig-hist-filter-btn.active[data-filter="apex"]{background:linear-gradient(135deg,rgba(168,85,247,.22),rgba(236,72,153,.1));border-color:rgba(168,85,247,.6);color:#c084fc;box-shadow:0 0 10px rgba(168,85,247,.22);}
-          .sig-hist-filter-btn.active[data-filter="core"]{background:linear-gradient(135deg,rgba(0,255,65,.14),rgba(0,255,65,.06));border-color:rgba(0,255,65,.5);color:#00ff41;box-shadow:0 0 10px rgba(0,255,65,.18);}
-        </style>
-        <!-- HISTORICAL PERFORMANCE DASHBOARD -->
-        <div id="hist-dashboard" style="display:none;">
-          <div class="hist-stats-row" id="hist-stats-row"></div>
-          <div id="hist-sym-section">
-            <div class="hist-section-label">RENDIMIENTO POR ACTIVO</div>
-            <div style="max-height:140px;overflow-y:auto;">
-              <table class="hist-sym-tbl"><thead><tr><th>ACTIVO</th><th>TRADES</th><th>WR%</th><th>PNL</th></tr></thead><tbody id="hist-sym-body"></tbody></table>
-            </div>
-          </div>
-          <div id="hist-heatmap-section" style="margin-top:8px;">
-            <div class="hist-section-label">MAPA DE CALOR POR HORA (UTC)</div>
-            <div class="hist-heatmap" id="hist-heatmap"></div>
-          </div>
-        </div>
-        <div style="max-height:220px;overflow-y:auto;" id="sig-hist-wrap">
-          <table class="sig-hist-tbl"><thead><tr><th>HORA</th><th>ACTIVO</th><th>MODO</th><th>SEÑAL</th><th>ENTRADA</th><th>TP</th><th>SL</th><th>CONF</th><th>RESULTADO</th></tr></thead><tbody id="sig-hist-body"><tr><td colspan="9" style="text-align:center;color:var(--td);padding:14px">Sin señales registradas</td></tr></tbody></table>
-        </div>
-        <div class="equity-chart"><canvas id="equity-canvas" style="width:100%;height:100%"></canvas></div>
-      </div>
+      <!-- 2026-05-08: HISTORIAL DE SEÑALES card removed.
+           Reasoning: V44.7 just deployed and the DB was purged of all pre-V44.7
+           signals to avoid mixing engines with the EMA-proxy bug into the new
+           validated motor's stats. The historial card (sig-hist-tbl + filters
+           + perf-by-pair + heatmap + equity-chart) is hidden until V44.7 has
+           enough decisive trades (≥200, gate documented in audit/V447-VALIDATION-PROTOCOL.md).
+           Keeps the rendering functions (renderSigHistory, etc.) alive — they
+           are still called by event handlers; their target DOM nodes simply
+           do not exist, so they degrade gracefully (each function null-guards
+           document.getElementById before mutating). -->
       <div id="signals-vip-promo" style="margin-top:14px;padding:28px 24px;border-radius:16px;border:2px solid rgba(255,215,0,.38);background:linear-gradient(135deg,rgba(255,215,0,.05),rgba(255,140,0,.02));position:relative;overflow:hidden;text-align:center;">
         <div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#FFD700,rgba(255,165,0,.9),#FFD700,transparent);animation:goldLine 2.5s ease-in-out infinite;"></div>
         <div style="font-family:'Orbitron',monospace;font-size:15px;color:var(--g);margin-bottom:8px;letter-spacing:3px;">ACCESO INSTITUCIONAL VIP</div>
