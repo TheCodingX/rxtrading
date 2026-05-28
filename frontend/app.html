@@ -3652,12 +3652,23 @@ body.is-vip-mode #CR {
         <div>
           <div class="card chc" style="margin-bottom:11px">
             <div class="chh">
-              <div class="stabs" id="m-stabs">
+              <!-- 2026-05-19: expanded stabs — all 15 universe pairs, horizontal scroll on overflow -->
+              <div class="stabs stabs-scroll" id="m-stabs" style="overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin;">
                 <button class="stab on" onclick="chSym('BTCUSDT',this,'m')">BTC</button>
                 <button class="stab" onclick="chSym('ETHUSDT',this,'m')">ETH</button>
                 <button class="stab" onclick="chSym('SOLUSDT',this,'m')">SOL</button>
                 <button class="stab" onclick="chSym('BNBUSDT',this,'m')">BNB</button>
                 <button class="stab" onclick="chSym('XRPUSDT',this,'m')">XRP</button>
+                <button class="stab" onclick="chSym('LINKUSDT',this,'m')">LINK</button>
+                <button class="stab" onclick="chSym('AVAXUSDT',this,'m')">AVAX</button>
+                <button class="stab" onclick="chSym('DOTUSDT',this,'m')">DOT</button>
+                <button class="stab" onclick="chSym('ADAUSDT',this,'m')">ADA</button>
+                <button class="stab" onclick="chSym('NEARUSDT',this,'m')">NEAR</button>
+                <button class="stab" onclick="chSym('INJUSDT',this,'m')">INJ</button>
+                <button class="stab" onclick="chSym('ATOMUSDT',this,'m')">ATOM</button>
+                <button class="stab" onclick="chSym('ARBUSDT',this,'m')">ARB</button>
+                <button class="stab" onclick="chSym('SUIUSDT',this,'m')">SUI</button>
+                <button class="stab" onclick="chSym('1000PEPEUSDT',this,'m')">PEPE</button>
               </div>
               <div style="display:flex;align-items:center;gap:8px;">
                 <span style="font-family:'Orbitron',monospace;font-size:7px;color:var(--td);letter-spacing:1px">HEIKIN-ASHI</span>
@@ -4803,7 +4814,7 @@ body.is-vip-mode #CR {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff8c00" stroke-width="2.5" style="margin-bottom:6px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 <div style="font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:#ff8c00;letter-spacing:1px;">BROKER NO CONECTADO</div>
                 <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,140,0,.7);margin-top:4px;">Conectá tu Binance Futures API en Configuración</div>
-                <button onclick="navigate('settings')" style="margin-top:10px;padding:8px 16px;background:rgba(255,140,0,.1);border:1px solid rgba(255,140,0,.5);color:#ff8c00;font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1.5px;border-radius:8px;cursor:pointer;">
+                <button onclick="navigate('settings');setTimeout(()=>{const c=document.getElementById('settings-broker-card');if(c){c.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>{c.style.transition='box-shadow .4s';c.style.boxShadow='0 0 30px rgba(255,215,0,.45)';setTimeout(()=>{c.style.boxShadow='';},1400);},420);}},120);" style="margin-top:10px;padding:8px 16px;background:rgba(255,140,0,.1);border:1px solid rgba(255,140,0,.5);color:#ff8c00;font-family:'Orbitron',monospace;font-size:9px;letter-spacing:1.5px;border-radius:8px;cursor:pointer;">
                   IR A CONFIGURACIÓN →
                 </button>
               </div>
@@ -19118,26 +19129,86 @@ function _renderResultsBacktest(trades, initCap, motor, days) {
 }
 
 // ════════════════════════════════════════════════════
-//  MARKET HEATMAP
+//  MARKET HEATMAP — 2026-05-19: all 15 universe pairs, real-time from WS (px/chg) + REST fallback
 // ════════════════════════════════════════════════════
+// Universe of pairs we want to render (= APEX universe + a few extras for context)
+const HEATMAP_UNIVERSE = [
+  ['BTCUSDT','BTC'],['ETHUSDT','ETH'],['SOLUSDT','SOL'],['BNBUSDT','BNB'],['XRPUSDT','XRP'],
+  ['LINKUSDT','LINK'],['AVAXUSDT','AVAX'],['DOTUSDT','DOT'],['ADAUSDT','ADA'],['NEARUSDT','NEAR'],
+  ['INJUSDT','INJ'],['ATOMUSDT','ATOM'],['ARBUSDT','ARB'],['SUIUSDT','SUI'],['1000PEPEUSDT','PEPE'],
+  ['DOGEUSDT','DOGE'],['POLUSDT','POL'],['RENDERUSDT','RENDER'],['TRXUSDT','TRX'],['LTCUSDT','LTC']
+];
+function _buildHeatmapDOM() {
+  const grid = document.getElementById('heatmap-grid');
+  if (!grid) return;
+  // Render only if structure differs (idempotent on multiple calls)
+  if (grid.children.length !== HEATMAP_UNIVERSE.length || !grid.dataset.dyn) {
+    grid.innerHTML = '';
+    grid.dataset.dyn = '1';
+    grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(78px, 1fr))';
+    for (const [sym, short] of HEATMAP_UNIVERSE) {
+      const cell = document.createElement('div');
+      cell.className = 'hm-cell';
+      cell.dataset.sym = sym;
+      cell.style.cssText = 'background:rgba(90,152,112,0.08);padding:8px 6px;border-radius:6px;text-align:center;transition:background .4s, transform .2s;cursor:pointer;';
+      cell.innerHTML = `<div class="hm-sym" style="font-size:10px;font-weight:700;color:rgba(255,255,255,.85);font-family:Orbitron,monospace;letter-spacing:.5px">${short}</div><div class="hm-px" style="font-size:9px;color:rgba(255,255,255,.5);font-family:'JetBrains Mono',monospace;margin-top:2px">—</div><div class="hm-pct" style="font-size:11px;font-weight:800;font-family:'JetBrains Mono',monospace;margin-top:3px;color:rgba(255,255,255,.5)">—</div>`;
+      cell.onclick = () => { try{ chSym(sym, null, 'm'); }catch(_){} };
+      cell.onmouseenter = () => cell.style.transform = 'translateY(-2px)';
+      cell.onmouseleave = () => cell.style.transform = '';
+      grid.appendChild(cell);
+    }
+  }
+}
+function _renderHeatmapFromLocal() {
+  const grid = document.getElementById('heatmap-grid');
+  if (!grid) return;
+  _buildHeatmapDOM();
+  // Read live data from WebSocket-fed window.px / window.chg (set by connWS)
+  const px = (typeof window !== 'undefined' && window.px) || {};
+  const chg = (typeof window !== 'undefined' && window.chg) || {};
+  for (const cell of grid.children) {
+    const sym = cell.dataset.sym;
+    const price = px[sym];
+    const pct = chg[sym];
+    const pxEl = cell.querySelector('.hm-px');
+    const pctEl = cell.querySelector('.hm-pct');
+    if (isFinite(price) && pxEl) {
+      pxEl.textContent = price >= 1000 ? '$' + price.toFixed(0) : price >= 1 ? '$' + price.toFixed(3) : '$' + price.toFixed(5);
+    }
+    if (isFinite(pct) && pctEl) {
+      pctEl.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+      pctEl.style.color = pct >= 0 ? '#00ff41' : '#ff3a3a';
+      const intensity = Math.min(Math.abs(pct)/8, 1);
+      cell.style.background = pct >= 0
+        ? `rgba(0,255,65,${0.05 + intensity*0.22})`
+        : `rgba(255,58,58,${0.05 + intensity*0.22})`;
+    }
+  }
+}
 async function updateHeatmap(){
-  const grid=document.getElementById('heatmap-grid');
-  if(!grid) return;
-  try{
-    const data=await fetchWithFallback('https://api.binance.com/api/v3/ticker/24hr',null,5000);
-    if(!data) return;
-    const hmSyms=['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','DOGEUSDT','ADAUSDT','AVAXUSDT','DOTUSDT','LINKUSDT','MATICUSDT','ATOMUSDT','UNIUSDT','LTCUSDT','APTUSDT'];
-    const cells=grid.querySelectorAll('.hm-cell');
-    hmSyms.forEach((sym,i)=>{
-      const tk=data.find(d=>d.symbol===sym);
-      if(!tk||!cells[i]) return;
-      const pct=parseFloat(tk.priceChangePercent);
-      const pctEl=cells[i].querySelector('.hm-pct');
-      if(pctEl){pctEl.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%';pctEl.style.color=pct>=0?'#00ff41':'#ff3a3a';}
-      const intensity=Math.min(Math.abs(pct)/8,1);
-      cells[i].style.background=pct>=0?`rgba(0,255,65,${0.05+intensity*0.2})`:`rgba(255,58,58,${0.05+intensity*0.2})`;
-    });
-  }catch(e){}
+  _buildHeatmapDOM();
+  // Initial fill via REST (so first paint isn't empty before WS catches all symbols)
+  try {
+    const data = await fetchWithFallback('https://api.binance.com/api/v3/ticker/24hr', null, 5000);
+    if (data && Array.isArray(data)) {
+      const tickMap = new Map(data.map(t => [t.symbol, t]));
+      window.px = window.px || {};
+      window.chg = window.chg || {};
+      for (const [sym] of HEATMAP_UNIVERSE) {
+        const tk = tickMap.get(sym);
+        if (tk) {
+          window.px[sym] = parseFloat(tk.lastPrice);
+          window.chg[sym] = parseFloat(tk.priceChangePercent);
+        }
+      }
+    }
+  } catch(e) {}
+  _renderHeatmapFromLocal();
+}
+// Real-time tick: re-render every 1.2s from WS-fed local state (cheap, no network call)
+if (typeof window !== 'undefined' && !window._heatmapTickerStarted) {
+  window._heatmapTickerStarted = true;
+  setInterval(() => { try { _renderHeatmapFromLocal(); } catch(e) {} }, 1200);
 }
 
 // ════════════════════════════════════════════════════

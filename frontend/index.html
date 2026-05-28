@@ -485,6 +485,133 @@ footer a:hover{color:var(--n);}
   .pay-plan{flex:0 0 calc(50% - 6px);min-width:100px;}
   .pay-plan-price{font-size:20px;}
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   2026-05-19: COMPREHENSIVE MOBILE RESPONSIVE LANDPAGE
+   Goal: landpage must look professional on mobile (not desktop-only-feel).
+   Strategy: every section single-column with sane padding, larger tap
+   targets, hide non-essential visual flourishes that don't translate.
+═══════════════════════════════════════════════════════════════════ */
+@media(max-width:768px){
+  /* Global container padding */
+  body{font-size:14px;}
+  .sect, .vip-sect, .final-cta{padding-left:14px!important;padding-right:14px!important;}
+  .sect-title{font-size:clamp(22px,7vw,32px)!important;line-height:1.15!important;}
+  .sect-sub{font-size:13px!important;line-height:1.55!important;padding:0 4px;}
+  .sect-tag{font-size:9px!important;letter-spacing:1.5px!important;}
+
+  /* HERO mobile */
+  .hero{padding:60px 14px 40px!important;min-height:auto!important;}
+  .hero-badge{font-size:9px!important;padding:6px 12px!important;letter-spacing:1.4px!important;}
+  .hero-rx{font-size:clamp(80px,28vw,140px)!important;line-height:1!important;margin:14px 0!important;}
+  .hero-tag{font-size:clamp(20px,6vw,28px)!important;line-height:1.2!important;margin-bottom:10px!important;}
+  .hero-sub{font-size:13px!important;padding:0 6px;line-height:1.55!important;max-width:100%!important;}
+  .ctas{flex-direction:column!important;gap:10px!important;width:100%!important;align-items:stretch!important;padding:0 6px!important;}
+  .ctas .btn-main, .ctas .btn-vip-land{width:100%!important;font-size:12px!important;padding:14px 18px!important;letter-spacing:1.5px!important;}
+  .hero-stats{grid-template-columns:repeat(2,1fr)!important;gap:8px!important;margin-top:22px!important;width:100%!important;max-width:380px;}
+  .hstat{padding:10px 8px!important;}
+  .hstat-v{font-size:14px!important;}
+  .hstat-l{font-size:8px!important;letter-spacing:1px!important;}
+  .scroll-ind{display:none!important;}
+
+  /* TICKER */
+  .ticker{padding:8px 0!important;}
+
+  /* DEMO / signals in action */
+  #demo{padding:24px 10px!important;}
+  #demo .demo-grid, #demo > div > div{grid-template-columns:1fr!important;gap:14px!important;}
+
+  /* ACTIVE SIGNALS NOW (signal-flow) */
+  .signal-flow{margin:0 4px!important;}
+  .sf-list{max-height:340px!important;}
+  .sf-item{display:grid!important;grid-template-columns:48px 50px 1fr 60px!important;grid-template-rows:auto auto!important;font-size:10px!important;padding:8px 10px!important;column-gap:6px;row-gap:4px;}
+  .sf-spacer{display:none!important;}
+  .sf-price{grid-column:3/4;grid-row:1;padding-left:0!important;}
+  .sf-tp, .sf-sl{grid-row:2;font-size:9px!important;}
+  .sf-conf{grid-column:4;grid-row:1;font-size:11px!important;}
+
+  /* HOW IT WORKS - steps vertical */
+  .steps{grid-template-columns:1fr!important;gap:18px!important;}
+  .step{padding:18px 14px!important;}
+  .step-connector{display:none!important;}
+  .step h4{font-size:15px!important;}
+  .step p{font-size:12px!important;}
+
+  /* ROI CALC */
+  #roi-calc .roi-wrap{padding:0 4px!important;}
+  .roi-input-block{padding:18px 0!important;}
+  .roi-input-row input{font-size:18px!important;}
+  .roi-scenarios, #roi-calc div[class*="grid"]{grid-template-columns:1fr!important;gap:10px!important;}
+
+  /* FREE FEATURES grid - 1 col */
+  .feat-grid{grid-template-columns:1fr!important;gap:14px!important;}
+  .fc{padding:18px 16px!important;}
+  .ft{font-size:13px!important;}
+  .fd{font-size:11px!important;line-height:1.55!important;}
+
+  /* FREE vs VIP compare table */
+  #compare, .compare-table{overflow-x:auto!important;-webkit-overflow-scrolling:touch;}
+  #compare table{min-width:520px!important;font-size:11px!important;}
+
+  /* VIP zone - everything stacks */
+  .vip-sect{padding:40px 10px!important;}
+  .vip-hero{padding:20px 10px!important;}
+  .vip-title-l{font-size:clamp(22px,6vw,30px)!important;}
+  .vip-sub-l{font-size:12px!important;line-height:1.6!important;padding:0 6px;}
+  .acc-row{grid-template-columns:repeat(2,1fr)!important;gap:8px!important;margin-top:20px;}
+  .acc-item{padding:10px 6px!important;}
+  .acc-v{font-size:16px!important;}
+  .acc-l{font-size:8px!important;letter-spacing:.8px!important;}
+  /* VFS tabs scrollable */
+  .vfs-tabs{flex-wrap:nowrap!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch;padding-bottom:6px;}
+  .vfs-tab{flex:0 0 auto!important;font-size:9px!important;padding:7px 11px!important;}
+  .vfs-detail{padding:18px 14px!important;}
+  .vfs-detail-title{font-size:18px!important;}
+  .vfs-detail-desc{font-size:12px!important;line-height:1.55!important;}
+  .vfs-detail-metrics{grid-template-columns:repeat(2,1fr)!important;gap:8px!important;}
+  /* Pricing plans */
+  .plans, .p-grid{grid-template-columns:1fr!important;gap:14px!important;}
+  .p-card{padding:22px 18px!important;}
+
+  /* COMMUNITY card */
+  .vip-comm-card{padding:24px 18px!important;}
+  .vip-comm-feat{grid-template-columns:1fr!important;}
+
+  /* TESTIMONIALS */
+  .rev-grid{grid-template-columns:1fr!important;}
+  .rev-card{padding:14px!important;}
+
+  /* FAQ */
+  #faq{padding:30px 10px!important;}
+  .faq-item{padding:12px 14px!important;}
+  .faq-q{font-size:13px!important;}
+  .faq-a p{font-size:12px!important;line-height:1.6!important;}
+  .faq-cat{font-size:11px!important;padding:14px 0 8px!important;}
+
+  /* DISCLAIMER V44.7 */
+  #disclaimer-v447{padding:22px 16px!important;margin:24px 6px!important;}
+  #disclaimer-v447 p{font-size:12px!important;line-height:1.65!important;}
+
+  /* FINAL CTA */
+  .final-cta{padding:40px 16px!important;}
+  .final-cta div[style*="Orbitron"]{font-size:clamp(22px,6.5vw,32px)!important;line-height:1.2!important;}
+
+  /* NAV mobile - already partially handled, ensure proper */
+  nav{padding:10px 14px!important;}
+
+  /* Footer */
+  footer{padding:24px 14px!important;font-size:11px!important;}
+}
+
+/* Ultra-small phones */
+@media(max-width:380px){
+  .hero-rx{font-size:80px!important;}
+  .hero-tag{font-size:18px!important;}
+  .hero-stats{grid-template-columns:repeat(2,1fr)!important;}
+  .sect-title{font-size:22px!important;}
+  .acc-row{grid-template-columns:1fr 1fr!important;}
+  .vfs-tab{font-size:8px!important;padding:6px 9px!important;}
+}
 </style>
 </head>
 <body>
@@ -507,10 +634,10 @@ footer a:hover{color:var(--n);}
 
 <!-- ═══ HERO — ORIGINAL STYLE ═══ -->
 <section class="hero">
-  <div class="hero-badge" role="status" aria-label="Version badge"><span class="pulse-dot"></span> REAL-TIME TRADING INTELLIGENCE · RX VIP</div>
+  <div class="hero-badge" role="status" aria-label="Version badge"><span class="pulse-dot"></span> REAL-TIME TRADING SIGNALS · RX</div>
   <div class="hero-rx">RX</div>
-  <div class="hero-tag">Trade Smarter. <span>Trade Faster.</span></div>
-  <div class="hero-sub">Professional crypto trading platform. Real-time signals, 25+ technical indicators, Heikin-Ashi charts and VIP institutional-precision zone.</div>
+  <div class="hero-tag">Stop guessing. <span>Trade with Structure.</span></div>
+  <div class="hero-sub">Professional crypto trading platform. Real-time signals, 25+ technical indicators, Heikin-Ashi charts and institutional-precision zone for serious traders.</div>
   <div class="ctas">
     <button class="btn-main" onclick="location.href='app.html'">ENTER DASHBOARD</button>
     <button class="btn-vip-land" onclick="location.href='app.html#vip'">&#x2726; ACCESS VIP</button>
@@ -577,7 +704,7 @@ footer a:hover{color:var(--n);}
 </section>
 
 <!-- LIVE SIGNAL FLOW -->
-<div class="sect" style="padding-bottom:40px;">
+<div class="sect" id="active-signals-section" style="padding-bottom:40px;">
   <div class="sect-header reveal">
     <div class="sect-tag">REAL TIME</div>
     <div class="sect-title">Active signals <span style="color:var(--n)">now</span></div>
@@ -811,7 +938,7 @@ footer a:hover{color:var(--n);}
 </div>
 
 <!-- HOW IT WORKS -->
-<div class="sect">
+<div class="sect" id="how-it-works-section">
   <div class="sect-header reveal">
     <div class="sect-tag">3 STEPS</div>
     <div class="sect-title">How it works</div>
@@ -844,8 +971,8 @@ footer a:hover{color:var(--n);}
 <!-- v1.1 COMUNIDAD VIP -->
 <div class="sect" id="vip-community">
   <div class="sect-header reveal">
-    <div class="sect-tag" style="color:var(--g);">COMUNIDAD</div>
-    <div class="sect-title">Unite a la <span style="color:var(--g);text-shadow:0 0 18px rgba(255,215,0,.5);">Comunidad VIP</span></div>
+    <div class="sect-tag" style="color:#fff;">COMUNIDAD</div>
+    <div class="sect-title">Unite a la <span style="color:#fff;">Comunidad</span></div>
   </div>
   <style>
     @keyframes vipCommShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
@@ -858,7 +985,7 @@ footer a:hover{color:var(--n);}
     .vip-comm-icon{width:56px;height:56px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);border:1px solid rgba(255,215,0,.3);border-radius:14px;transition:all .5s cubic-bezier(.16,1,.3,1);cursor:pointer;color:var(--g);}
     .vip-comm-icon:hover{transform:rotate(360deg) scale(1.1);border-color:rgba(255,215,0,.8);box-shadow:0 0 20px rgba(255,215,0,.45);}
     .vip-comm-feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:22px 0 12px;}
-    .vip-comm-feat-item{padding:10px;background:rgba(0,0,0,.25);border:1px solid rgba(255,215,0,.15);border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(255,255,255,.85);text-align:left;display:flex;gap:8px;align-items:flex-start;}
+    .vip-comm-feat-item{padding:10px 14px;background:rgba(0,0,0,.25);border:1px solid rgba(255,215,0,.15);border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(255,255,255,.85);text-align:center;display:flex;gap:8px;align-items:center;justify-content:center;}
     .vip-comm-feat-item .chk{color:var(--g);font-weight:900;flex-shrink:0;}
     .vip-comm-cta{display:inline-flex;align-items:center;gap:10px;margin-top:16px;padding:14px 30px;background:linear-gradient(135deg,rgba(255,215,0,.2),rgba(255,138,0,.14));border:1px solid rgba(255,215,0,.55);border-radius:10px;font-family:'Orbitron';font-size:11px;font-weight:900;letter-spacing:2px;color:var(--g);text-shadow:0 0 10px rgba(255,215,0,.5);cursor:pointer;transition:all .35s cubic-bezier(.16,1,.3,1);text-decoration:none;}
     .vip-comm-cta:hover{transform:scale(1.05);box-shadow:0 0 30px rgba(255,215,0,.5);}
@@ -1099,7 +1226,7 @@ footer a:hover{color:var(--n);}
 </div>
 
 <!-- FINAL CTA -->
-<section class="final-cta">
+<section class="final-cta" id="final-cta-section">
   <div class="reveal">
     <div style="font-family:'Orbitron';font-size:clamp(24px,3.5vw,42px);font-weight:800;margin-bottom:14px">Ready to trade with <span style="color:var(--n)">precision</span>?</div>
     <p style="color:var(--tm);font-size:16px;margin-bottom:28px">Thousands of traders already use RX Trading. Try it free now.</p>
@@ -1394,8 +1521,9 @@ sObs.observe(document.querySelector('.stats-row'));
     const base=prices[sym]*(0.995+Math.random()*0.01);
     const tp=dir==='BUY'?base*1.008:base*0.992;
     const sl=dir==='BUY'?base*0.994:base*1.006;
-    const conf=Math.floor(65+Math.random()*30);
-    const confColor=conf>=85?'#00ff41':conf>=75?'#FFD700':'var(--tm)';
+    // 2026-05-19: confidence floor 75% (only high-conviction-style demo); color always green
+    const conf=Math.floor(75+Math.random()*22); // 75-96%
+    const confColor='#00ff41';
     const fmt=(v)=>v>=100?v.toFixed(1):v>=1?v.toFixed(3):v.toFixed(5);
     const el=document.createElement('div');
     el.className='sf-item';
@@ -1575,6 +1703,47 @@ sObs.observe(document.querySelector('.stats-row'));
 // ══ LANGUAGE TOGGLE ══
 // Plain-text dictionary: keys/values must match the EXACT trimmed textContent of leaf nodes
 const I18N = {
+  // 2026-05-19 — V44.7 disclaimer + recent strings i18n batch
+  'Institutional end-to-end platform. APEX V44.7 engine (funding carry + real Binance premium-index) currently in live validation, autotrading on Binance Futures with broker safety gates, professional paper trading, VIP zone with Smart Money Concepts, automatic reconciliation, and Discord support community.':'Plataforma institucional end-to-end. Motor APEX V44.7 (funding carry + premium-index real de Binance) en período de validación en vivo, autotrading en Binance Futures con safety gates de broker, paper trading profesional, zona VIP con Smart Money Concepts, reconciliación automática, y comunidad Discord de soporte.',
+  'Public channel · Support community':'Canal público &middot; Comunidad de soporte',
+  '⚠ Informational calculator based on backtests of previous versions (V44.6 with funding-source bug). The APEX V44.7 engine fixes the bug and is currently in live validation (14–30 days or 200+ closed trades). Live metrics are not published until we have a sufficient sample. Use this calculator as theoretical reference, NOT as projection.':'⚠ Calculadora informativa basada en backtests de versiones anteriores (V44.6 con bug de funding-source). El motor APEX V44.7 corrige el bug y está actualmente en período de validación live (14–30 días o 200+ trades cerrados). No publicamos métricas live hasta tener muestra suficiente. Usá esta calculadora como referencia teórica, NO como proyección.',
+  'TECHNICAL DISCLAIMER · V44.7 IN VALIDATION':'DISCLAIMER TÉCNICO · V44.7 EN VALIDACIÓN',
+  'Why we are not publishing live metrics right now':'Por qué no publicamos métricas live ahora mismo',
+  'What happened.':'Qué pasó.',
+  'V44.5 and V44.6 — the versions running until early May 2026 — used an internal EMA approximation as the funding signal, instead of the real premium-index published by Binance. The historical backtest (PF 1.40, WR 68%) used the same approximation, so the math closed. But in live markets the proxy desynced from real funding enough to degrade the engine to ~coinflip:':'Las versiones V44.5 y V44.6 del motor — las que estuvieron operativas hasta el 1 de mayo 2026 — usaban una aproximación EMA interna como señal de funding, en lugar del premium-index real publicado por Binance. El backtest histórico (PF 1.40, WR 68%) se calculó con esa misma aproximación, así que matemáticamente cerraba. Pero en mercado en vivo el proxy se desincronizaba con el funding real lo suficiente como para degradar el motor a coinflip:',
+  'PF ≈ 1.05, WR ≈ 48% over ~750 trades in 42 days.':'PF ≈ 1.05, WR ≈ 48% sobre ~750 trades en 42 días.',
+  'What we did.':'Qué hicimos.',
+  'V44.7 (deployed May 1 2026) uses Binance real premium-index. Strategy logic is identical; only the funding input changed. Every signal now carries an explicit funding_source = premium_index_real field, verifiable in admin logs.':'V44.7 (deploy 1 de mayo 2026) usa el premium-index real de Binance. La lógica de la estrategia es idéntica; lo único que cambia es la fuente del dato de funding. Cada señal que generamos ahora trae explícito el campo funding_source = premium_index_real, verificable en logs de admin.',
+  'What we cannot promise yet.':'Qué no podemos prometer todavía.',
+  'We only have a few days of V44.7 live data — statistically meaningless. We need 14 to 30 days (200+ closed trades with decisive outcome) to say honestly whether the engine recovered backtest performance or sits between 1.05 and 1.40.':'Solo tenemos pocos días de datos en vivo de V44.7 — estadísticamente, no significa nada. Necesitamos entre 14 y 30 días (200+ trades cerrados con outcome decisivo) para decir con honestidad si el motor recuperó la performance del backtest, o si está en algún punto entre 1.05 y 1.40.',
+  'Until then we do not publish live metrics, do not promise specific PF, and do not sell new memberships under the old numbers.':'Hasta entonces no publicamos métricas live, no prometemos PF específico, y no vendemos membresías nuevas con los números viejos.',
+  'How it is validated.':'Cómo se valida.',
+  'Four simultaneous gates: (1) ≥ 200 decisive trades (Win+Loss); (2) WR Wilson 95% lower bound > 52%; (3) PF bootstrap 95% lower CI ≥ 1.20; (4) funding_source = premium_index_real ≥ 99%.':'Cuatro gates simultáneos: (1) ≥ 200 trades decisivos (Win+Loss); (2) WR Wilson 95% lower bound &gt; 52%; (3) PF bootstrap 95% lower CI ≥ 1.20; (4) funding_source = premium_index_real ≥ 99%.',
+  '≥ 99%. Public endpoint for health check:':'≥ 99%. Endpoint público para health check:',
+  'Three options, any is fine: (1) free 30-day membership extension (timer paused during validation); (2) 100% credit applicable to any future RX Trading product, no expiry; (3) 100% refund to the original payment method. Email':'Tres opciones, cualquiera está bien: (1) extensión gratis de membresía 30 días (timer pausado durante validación); (2) crédito 100% aplicable a cualquier producto futuro de RX Trading, sin expiry; (3) reembolso 100% al método de pago original. Mandá email a',
+  'with your license code and the chosen option; processed within 5 business days.':'con tu código de licencia y la opción elegida; procesamos en 5 días hábiles.',
+  'Internal technical document:':'Documento técnico interno:',
+  '. The backtest metrics mentioned in other sections (FAQ, ROI calculator) correspond to previous versions with the bug.':'. Las métricas de backtest mencionadas en otras secciones (FAQ, calculadora ROI) corresponden a versiones anteriores con el bug.',
+  'Algorithmic flagship engine: combines funding carry + z-sizing + multi-window across 15 Binance Futures pairs. Current version':'Motor algorítmico flagship: combina funding carry + z-sizing + multi-window sobre 15 pares de Binance Futures. La versión actual',
+  '(deployed May 1 2026) uses Binance real premium-index as funding source. Currently in':'(deploy 1 de mayo 2026) usa el premium-index real de Binance como fuente de funding. Está en',
+  'live validation period':'período de validación live',
+  '(14–30 days or 200+ closed trades).':'(14&ndash;30 días o 200+ trades cerrados).',
+  'We do not publish live metrics until we have a statistically sufficient sample.':'No publicamos métricas live hasta tener muestra estadísticamente suficiente.',
+  'Technical honesty:':'Honestidad técnica:',
+  'previous backtests (V44.5/V44.6) were calculated with an EMA funding proxy instead of Binance real premium-index. In live, the engine degraded to coinflip (~PF 1.05, WR 48% over ~750 trades / 42 days). V44.7 fixes the bug; strategy logic is identical.':'los backtests previos (V44.5/V44.6) se calcularon con un proxy EMA de funding en lugar del premium-index real de Binance. En vivo, el motor degradó a coinflip (~PF 1.05, WR 48% sobre ~750 trades / 42 días). V44.7 corrige el bug; la lógica de la estrategia es idéntica.',
+  'Until we have 200+ closed trades with V44.7 (14–30 days) we do not affirm a specific PF/WR.':'Hasta tener 200+ trades cerrados con V44.7 (14&ndash;30 días) no afirmamos un PF/WR específico.',
+  'By design, the funding carry strategy is':'Por diseño, la estrategia funding carry es',
+  'regime-agnostic':'régimen-agnóstica',
+  '— it targets inefficiencies in cross-pair funding, independent of price direction.':'— apunta a ineficiencias en el funding cross-pair, independientemente de la dirección del precio.',
+  'V44.7 is still being validated live':'En vivo todavía estamos validando V44.7',
+  'on Binance real premium-index. Until we have >200 closed trades we cannot affirm regime behavior with statistical honesty.':'sobre el premium-index real de Binance. Hasta tener &gt;200 trades cerrados no podemos afirmar comportamiento por régimen con honestidad estadística.',
+  'Not by design: with 5x leverage and tight SL (≤2% of notional), the worst per-trade scenario is -2% of committed capital. Safety gates (daily stop, DD peak, circuit breaker, min balance, max deployed) stop autotrade before any spiral.':'No por diseño: con leverage 5x y SL ajustado (≤2% del notional), el peor escenario por trade es -2% del capital comprometido. Los safety gates (daily stop, DD peak, circuit breaker, min balance, max deployed) paran el autotrade antes de cualquier espiral.',
+  'These are risk limits, not profitability guarantees.':'Estos son límites de riesgo, no garantías de rentabilidad.',
+  'If you did NOT execute any real trade with broker connected in the first 7 days, 100% refund no questions asked. Between 7-30 days: 50% partial refund if you executed <5 trades. After 30 days: no refund.':'Si NO ejecutaste ningún trade real con broker conectado en los primeros 7 días, reembolso 100% sin preguntas. Entre 7-30 días: reembolso parcial 50% si ejecutaste &lt;5 trades. Después de 30 días: sin reembolso.',
+  'Special policy V44.7 (May 2026):':'Política especial V44.7 (May 2026):',
+  'users who bought VIP between V44.5 deploy and V44.7 are entitled to 100% refund, 100% credit or 30-day extension — regardless of':'usuarios que compraron VIP entre el deploy de V44.5 y V44.7 tienen derecho a refund 100%, crédito 100% o extensión 30 días — sin importar el',
+  'with your license code and the option.':'con tu código de licencia y la opción.',
+  '(response <24h business) or public Discord':'(respuesta &lt;24h hábil) o Discord público',
   // Nav
   'Features':'Funciones','Pricing':'Precios','OPEN PLATFORM':'ABRIR PLATAFORMA','FAQ':'FAQ','VIP':'VIP',
   // 2026-04-23: new strings for Discord community card
@@ -1989,6 +2158,9 @@ const I18N = {
 // innerHTML translations for elements containing child HTML (spans, etc.)
 const I18N_HTML = {
   'Trade Smarter. <span>Trade Faster.</span>':'Operá Mejor. <span>Operá Más Rápido.</span>',
+  'Stop guessing. <span>Trade with Structure.</span>':'Dejá de adivinar. <span>Operá con Estructura.</span>',
+  'REAL-TIME TRADING SIGNALS · RX':'SEÑALES DE TRADING EN TIEMPO REAL · RX',
+  'Professional crypto trading platform. Real-time signals, 25+ technical indicators, Heikin-Ashi charts and institutional-precision zone for serious traders.':'Plataforma profesional de trading de cripto. Señales en tiempo real, 25+ indicadores técnicos, charts Heikin-Ashi y zona de precisión institucional para traders serios.',
   'Signals in <span style="color:var(--n)">action</span>':'Señales en <span style="color:var(--n)">acción</span>',
   'Active signals <span style="color:var(--n)">now</span>':'Señales activas <span style="color:var(--n)">ahora</span>',
   'All of this is <span style="color:var(--n)">FREE</span>':'Todo esto es <span style="color:var(--n)">GRATIS</span>',
@@ -1996,7 +2168,7 @@ const I18N_HTML = {
   'Verified <span style="color:var(--g)">VIP</span> traders':'Traders <span style="color:var(--g)">VIP</span> verificados',
   'Ready to trade with <span style="color:var(--n)">precision</span>?':'Listo para operar con <span style="color:var(--n)">precisión</span>?',
   // 2026-04-23: Discord community section heading (HTML with inline styled span)
-  'Join the <span style="color:var(--g);text-shadow:0 0 18px rgba(255,215,0,.5);">VIP Community</span>':'Unite a la <span style="color:var(--g);text-shadow:0 0 18px rgba(255,215,0,.5);">Comunidad VIP</span>',
+  'Join the <span style="color:#fff;">Community</span>':'Unite a la <span style="color:#fff;">Comunidad</span>',
   // 2026-04-24 FINAL: FAQ Q&A — cada <span> dentro de .faq-q y cada <p> dentro de .faq-a.
   // Convención: 'EnglishHTML':'SpanishHTML'. Content con <strong> debe matchear exacto.
   // Empezando category
@@ -2578,6 +2750,47 @@ if(landingLang === 'es') setTimeout(()=>applyLandingLang(), 200);
     banner.classList.remove('in');
     setTimeout(() => banner.remove(), 500);
   };
+})();
+</script>
+<!-- 2026-05-19: landpage section reorder to match requested order -->
+<script>
+(function reorderLandpage(){
+  // Wait for DOM ready (script is at end of body so it's effectively ready)
+  // Order: hero → demo (Signals in action) → active-signals → how-it-works → roi-calc → features (All of this is FREE)
+  //        → compare (Free vs VIP) → vip (RX Trading VIP) → vip-community → testimonials → faq → disclaimer-v447 → final-cta
+  const order = [
+    null,                       // hero is <section class="hero"> — pinned, do not touch (will reuse below)
+    'demo',
+    'active-signals-section',
+    'how-it-works-section',
+    'roi-calc',
+    'features',
+    'compare',
+    'vip',
+    'vip-community',
+    'testimonials',
+    'faq',
+    'disclaimer-v447',
+    'final-cta-section'
+  ];
+  const hero = document.querySelector('section.hero');
+  const ticker = document.querySelector('.ticker');
+  if (!hero) return;
+  // Anchor point: just after the ticker if it exists, else just after hero
+  const anchor = ticker || hero;
+  let lastInserted = anchor;
+  for (const id of order) {
+    if (!id) continue;
+    const el = document.getElementById(id);
+    if (!el) continue;
+    // Detach + insert after lastInserted
+    if (el.previousSibling === lastInserted) {
+      lastInserted = el; // already in correct spot
+      continue;
+    }
+    lastInserted.parentNode.insertBefore(el, lastInserted.nextSibling);
+    lastInserted = el;
+  }
 })();
 </script>
 </body>
